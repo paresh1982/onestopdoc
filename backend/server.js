@@ -602,6 +602,64 @@ app.post('/api/tools/edit', upload.single('file'), async (req, res) => {
   }
 });
 
+
+
+// ─── PDF TOOL: Rotate ────────────────────────────────────
+app.post('/api/tools/rotate', upload.single('file'), async (req, res) => {
+  try {
+    const { degrees } = req.body;
+    if (!req.file || !degrees) return res.status(400).json({ error: 'Missing file or rotation degrees.' });
+
+    const pdfBytes = fs.readFileSync(req.file.path);
+    const pdf = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+    const pages = pdf.getPages();
+    
+    const rot = parseInt(degrees) || 90;
+    pages.forEach(page => {
+      const currentRotation = page.getRotation().angle;
+      page.setRotation({ angle: (currentRotation + rot) % 360 });
+    });
+
+    const outBytes = await pdf.save();
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename=OneStopDoc_Rotated.pdf');
+    res.send(Buffer.from(outBytes));
+    
+    fs.unlinkSync(req.file.path);
+  } catch (err) {
+    res.status(500).json({ error: 'Rotation failed', details: err.message });
+  }
+});
+
+// ─── PDF TOOL: Reorder ───────────────────────────────────
+app.post('/api/tools/reorder', upload.single('file'), async (req, res) => {
+  try {
+    const { sequence } = req.body; // e.g., "3, 1, 2"
+    if (!req.file || !sequence) return res.status(400).json({ error: 'Missing file or page sequence.' });
+
+    const pdfBytes = fs.readFileSync(req.file.path);
+    const pdf = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+    const pageCount = pdf.getPageCount();
+
+    const order = sequence.split(',').map(s => parseInt(s.trim())).filter(n => n > 0 && n <= pageCount);
+    if (order.length === 0) return res.status(400).json({ error: 'Invalid page sequence.' });
+
+    const newPdf = await PDFDocument.create();
+    // Copy pages in the specified order
+    const copiedPages = await newPdf.copyPages(pdf, order.map(i => i - 1));
+    copiedPages.forEach(p => newPdf.addPage(p));
+
+    const outBytes = await newPdf.save();
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename=OneStopDoc_Reordered.pdf');
+    res.send(Buffer.from(outBytes));
+    
+    fs.unlinkSync(req.file.path);
+  } catch (err) {
+    res.status(500).json({ error: 'Reordering failed', details: err.message });
+  }
+});
+
 // ─── Export conversation data as CSV ─────────────────────
 app.get('/api/conversations/:id/export', async (req, res) => {
   const { format } = req.query;

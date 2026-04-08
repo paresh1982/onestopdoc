@@ -39,6 +39,8 @@ function ToolModal({ tool, onClose }) {
   const [files, setFiles] = useState([]);
   const [pageRange, setPageRange] = useState('');
   const [instructions, setInstructions] = useState('');
+  const [sequence, setSequence] = useState('');
+  const [degrees, setDegrees] = useState('90');
   const [isProcessing, setIsProcessing] = useState(false);
   const title = tool.label;
 
@@ -51,12 +53,10 @@ function ToolModal({ tool, onClose }) {
         files.forEach(f => formData.append('files', f));
       } else {
         formData.append('file', files[0]);
-        if (tool.id === 'split' && pageRange) {
-          formData.append('ranges', pageRange);
-        }
-        if (tool.id === 'edit' && instructions) {
-          formData.append('instructions', instructions);
-        }
+        if (tool.id === 'split' && pageRange) formData.append('ranges', pageRange);
+        if (tool.id === 'edit' && instructions) formData.append('instructions', instructions);
+        if (tool.id === 'rotate') formData.append('degrees', degrees);
+        if (tool.id === 'reorder') formData.append('sequence', sequence);
       }
 
       const response = await axios.post(`${API}/tools/${tool.id}`, formData, {
@@ -155,6 +155,39 @@ function ToolModal({ tool, onClose }) {
                 onChange={(e) => setInstructions(e.target.value)}
                 className="w-full bg-surface/50 border border-white/10 rounded-2xl px-5 py-3 text-sm focus:outline-none focus:border-primary/50 transition-all placeholder:text-muted/30 min-h-[100px] resize-none"
               />
+            </div>
+          )}
+
+          {files.length > 0 && tool.id === 'rotate' && (
+            <div className="mt-8 space-y-3">
+              <label className="text-[10px] font-bold text-primary uppercase tracking-widest pl-1">Rotation Angle</label>
+              <div className="flex gap-4">
+                {['90', '180', '270'].map(deg => (
+                  <button 
+                    key={deg} 
+                    onClick={() => setDegrees(deg)}
+                    className={`flex-1 py-3 rounded-2xl border transition-all text-sm font-medium ${
+                      degrees === deg ? 'bg-primary/20 border-primary text-white' : 'bg-surface/50 border-white/10 text-muted hover:border-white/20'
+                    }`}
+                  >
+                    {deg}°
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {files.length > 0 && tool.id === 'reorder' && (
+            <div className="mt-8 space-y-3">
+              <label className="text-[10px] font-bold text-primary uppercase tracking-widest pl-1">New Page Sequence</label>
+              <input 
+                type="text"
+                placeholder="e.g. 3, 1, 2, 4 (shuffles pages)"
+                value={sequence}
+                onChange={(e) => setSequence(e.target.value)}
+                className="w-full bg-surface/50 border border-white/10 rounded-2xl px-5 py-3 text-sm focus:outline-none focus:border-primary/50 transition-all placeholder:text-muted/30"
+              />
+              <p className="text-[10px] text-muted/40 px-2 italic">Identify pages by their current numbers separated by commas.</p>
             </div>
           )}
 
@@ -577,10 +610,10 @@ export default function App() {
                 <p className="px-3 text-[10px] font-bold text-muted/50 uppercase tracking-widest mb-2">Page Organization</p>
                 <div className="space-y-1">
                   {[
-                    { icon: RotateCw, label: 'Rotate Pages' },
-                    { icon: Layout, label: 'Reorder / Delete' },
+                    { id: 'rotate', icon: RotateCw, label: 'Rotate Pages' },
+                    { id: 'reorder', icon: Layout, label: 'Reorder / Delete' },
                   ].map(tool => (
-                    <button key={tool.label} className="tool-btn">
+                    <button key={tool.id} className="tool-btn" onClick={() => setActiveTool(tool)}>
                       <tool.icon size={14} /> {tool.label}
                     </button>
                   ))}
