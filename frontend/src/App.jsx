@@ -32,9 +32,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 
-const API = import.meta.env.PROD || !window.location.origin.includes('localhost') 
-  ? '/api' 
-  : 'http://localhost:5000/api';
+const API = '/api';
 
 // ─── Tool Modal (Merge, Split, etc.) ───────────────────────
 function ToolModal({ tool, onClose }) {

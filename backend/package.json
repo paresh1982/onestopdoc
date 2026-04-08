@@ -10,14 +10,14 @@
   },
   "dependencies": {
     "@google/genai": "latest",
-    "express": "^5.0.0",
-    "multer": "^2.0.0",
+    "archiver": "^7.0.1",
     "cors": "^2.8.5",
+    "docx": "^9.6.1",
     "dotenv": "^16.4.5",
     "exceljs": "^4.4.0",
-    "archiver": "^7.0.1",
-    "sqlite3": "^5.1.7",
-    "docx": "^9.1.0",
-    "pdf-lib": "^1.17.1"
+    "express": "^5.0.0",
+    "multer": "^2.0.0",
+    "pdf-lib": "^1.17.1",
+    "sqlite3": "^5.1.7"
   }
 }

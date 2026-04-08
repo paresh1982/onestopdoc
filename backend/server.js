@@ -359,6 +359,30 @@ app.post('/api/tools/split', upload.single('file'), async (req, res) => {
   }
 });
 
+// ─── PDF TOOL: Compress ──────────────────────────────────
+app.post('/api/tools/compress', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Please upload a PDF to compress.' });
+
+    const pdfBytes = fs.readFileSync(req.file.path);
+    const pdf = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+    
+    // pdf-lib's built-in compression happens during save()
+    const compressedBytes = await pdf.save({ 
+      useObjectStreams: true, 
+      addDefaultPage: false 
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename=OneStopDoc_Compressed.pdf');
+    res.send(Buffer.from(compressedBytes));
+    
+    fs.unlinkSync(req.file.path);
+  } catch (err) {
+    res.status(500).json({ error: 'Compression failed', details: err.message });
+  }
+});
+
 // ─── Export conversation data as CSV ─────────────────────
 app.get('/api/conversations/:id/export', async (req, res) => {
   const { format } = req.query;
