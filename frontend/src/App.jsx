@@ -67,13 +67,19 @@ function ToolModal({ tool, onClose }) {
       link.remove();
       onClose();
     } catch (err) {
-      let errorMsg = `Efficiency error: ${tool.label} failed.`;
-      if (err.response?.data instanceof Blob) {
-        const text = await err.response.data.text();
-        try {
-          const json = JSON.parse(text);
-          errorMsg = json.details || json.error || errorMsg;
-        } catch (e) {}
+      console.error("DEBUG - Tool Error:", err);
+      let errorMsg = `Efficiency error: ${tool.label} failed.\n\nDetails: ${err.message}`;
+      
+      if (err.response?.data) {
+        if (err.response.data instanceof Blob) {
+          const text = await err.response.data.text();
+          try {
+            const json = JSON.parse(text);
+            if (json.error || json.details) errorMsg += `\nBackend: ${json.details || json.error}`;
+          } catch (e) {}
+        } else if (typeof err.response.data === 'string') {
+          errorMsg += `\nBackend: ${err.response.data}`;
+        }
       }
       alert(errorMsg);
     } finally {
