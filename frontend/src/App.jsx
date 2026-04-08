@@ -37,6 +37,7 @@ const API = '/api';
 // ─── Tool Modal (Merge, Split, etc.) ───────────────────────
 function ToolModal({ tool, onClose }) {
   const [files, setFiles] = useState([]);
+  const [pageRange, setPageRange] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const title = tool.label;
 
@@ -49,6 +50,9 @@ function ToolModal({ tool, onClose }) {
         files.forEach(f => formData.append('files', f));
       } else {
         formData.append('file', files[0]);
+        if (tool.id === 'split' && pageRange) {
+          formData.append('ranges', pageRange);
+        }
       }
 
       const response = await axios.post(`${API}/tools/${tool.id}`, formData, {
@@ -124,8 +128,22 @@ function ToolModal({ tool, onClose }) {
             <p className="text-xs text-muted">Drag & drop or click to browser</p>
           </div>
 
+          {files.length > 0 && tool.id === 'split' && (
+            <div className="mt-8 space-y-3">
+              <label className="text-[10px] font-bold text-primary uppercase tracking-widest pl-1">Page Ranges (Optional)</label>
+              <input 
+                type="text"
+                placeholder="e.g. 1-3, 5, 8-10"
+                value={pageRange}
+                onChange={(e) => setPageRange(e.target.value)}
+                className="w-full bg-surface/50 border border-white/10 rounded-2xl px-5 py-3 text-sm focus:outline-none focus:border-primary/50 transition-all placeholder:text-muted/30"
+              />
+              <p className="text-[10px] text-muted/40 px-2 italic">Leave blank to split into individual pages.</p>
+            </div>
+          )}
+
           {files.length > 0 && (
-            <div className="mt-6 space-y-2 overflow-y-auto max-h-[200px] custom-scrollbar">
+            <div className="mt-8 space-y-2 overflow-y-auto max-h-[200px] custom-scrollbar">
               <p className="text-[10px] font-bold text-primary uppercase tracking-widest pl-1">Selected Files</p>
               {files.map((f, i) => (
                 <div key={i} className="flex items-center justify-between bg-white/[0.02] border border-white/5 p-3 rounded-xl">

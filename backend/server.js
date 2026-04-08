@@ -330,29 +330,62 @@ app.post('/api/tools/merge', upload.array('files'), async (req, res) => {
 app.post('/api/tools/split', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Please upload a PDF to split.' });
+    const { ranges } = req.body;
 
     const pdfBytes = fs.readFileSync(req.file.path);
     const pdf = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
     const pageCount = pdf.getPageCount();
 
-    if (pageCount < 2) {
-      return res.status(400).json({ error: 'This PDF only has 1 page and cannot be split.' });
+    // ─── Scenario A: Specific Ranges provided ───
+    if (ranges && ranges.trim() !== '') {
+      const resultPdf = await PDFDocument.create();
+      const tokens = ranges.split(',').map(s => s.trim());
+      
+      for (const token of tokens) {
+        if (token.includes('-')) {
+          const [start, end] = token.split('-').map(Number);
+          if (start > 0 && end <= pageCount && start <= end) {
+            const indices = Array.from({ length: end - start + 1 }, (_, i) => start - 1 + i);
+            const pages = await resultPdf.copyPages(pdf, indices);
+            pages.forEach(p => resultPdf.addPage(p));
+          }
+        } else {
+          const pageNum = Number(token);
+          if (pageNum > 0 && pageNum <= pageCount) {
+            const [page] = await resultPdf.copyPages(pdf, [pageNum - 1]);
+            resultPdf.addPage(page);
+          }
+        }
+      }
+
+      if (resultPdf.getPageCount() === 0) {
+        return res.status(400).json({ error: 'No valid pages found in the specified range.' });
+      }
+
+      const outBytes = await resultPdf.save();
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'attachment; filename=OneStopDoc_Split_Range.pdf');
+      res.send(Buffer.from(outBytes));
+    } 
+    // ─── Scenario B: Explode all pages (Default) ───
+    else {
+      if (pageCount < 2) return res.status(400).json({ error: 'This PDF only has 1 page and cannot be split.' });
+      
+      const archive = archiver('zip', { zlib: { level: 9 } });
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', 'attachment; filename=OneStopDoc_Split_Pages.zip');
+      archive.pipe(res);
+
+      for (let i = 0; i < pageCount; i++) {
+        const subPdf = await PDFDocument.create();
+        const [copiedPage] = await subPdf.copyPages(pdf, [i]);
+        subPdf.addPage(copiedPage);
+        const subPdfBytes = await subPdf.save();
+        archive.append(Buffer.from(subPdfBytes), { name: `page_${i + 1}.pdf` });
+      }
+      await archive.finalize();
     }
 
-    const archive = archiver('zip', { zlib: { level: 9 } });
-    res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', 'attachment; filename=OneStopDoc_Split_Pages.zip');
-    archive.pipe(res);
-
-    for (let i = 0; i < pageCount; i++) {
-      const subPdf = await PDFDocument.create();
-      const [copiedPage] = await subPdf.copyPages(pdf, [i]);
-      subPdf.addPage(copiedPage);
-      const subPdfBytes = await subPdf.save();
-      archive.append(Buffer.from(subPdfBytes), { name: `page_${i + 1}.pdf` });
-    }
-
-    await archive.finalize();
     fs.unlinkSync(req.file.path);
   } catch (err) {
     res.status(500).json({ error: 'Split failed', details: err.message });
