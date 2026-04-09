@@ -772,7 +772,7 @@ export default function App() {
                   multiple
                   className="hidden"
                   accept=".pdf,.xlsx,.xls,.csv"
-                  onChange={handleFileUpload}
+                  onChange={handleFileSelect}
                 />
               </button>
 
