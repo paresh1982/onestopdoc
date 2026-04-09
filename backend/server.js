@@ -77,8 +77,14 @@ const upload = multer({
   storage,
   limits: { fileSize: 100 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    if (file.mimetype === 'application/pdf') cb(null, true);
-    else cb(new Error('Only PDF files are allowed'), false);
+    const allowed = [
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel',
+      'text/csv'
+    ];
+    if (allowed.includes(file.mimetype)) cb(null, true);
+    else cb(new Error('Only PDF, Excel, and CSV files are allowed'), false);
   },
 });
 
@@ -102,6 +108,31 @@ RULES:
 5. If the user asks a follow-up question about a previously uploaded document, use your memory of the conversation.
 6. Always be ready to export data. If asked, format it as CSV-ready or JSON.
 7. Never refuse to analyze a document. Adapt to whatever the user needs.`;
+
+async function getFileContext(file) {
+  if (file.mimetype === 'application/pdf') {
+    return {
+      inlineData: {
+        data: fs.readFileSync(file.path).toString('base64'),
+        mimetype: 'application/pdf',
+      },
+    };
+  } else if (file.mimetype.includes('spreadsheet') || file.mimetype.includes('excel') || file.mimetype.includes('csv')) {
+    const workbook = new ExcelJS.Workbook();
+    if (file.mimetype === 'text/csv') await workbook.csv.readFile(file.path);
+    else await workbook.xlsx.readFile(file.path);
+    
+    let excelText = `EXCEL CONTENT (File: ${file.originalname}):\n`;
+    workbook.eachSheet(sheet => {
+      excelText += `Sheet: ${sheet.name}\n`;
+      sheet.eachRow(row => {
+        excelText += `| ${row.values.filter(v => v !== undefined).join(' | ')} |\n`;
+      });
+    });
+    return { text: excelText };
+  }
+  return null;
+}
 
 async function callGemini(contents, maxRetries = 3) {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -217,10 +248,15 @@ app.post('/api/chat', upload.array('files', 10), async (req, res) => {
       });
     }
 
-    // Save uploaded files
+    // Process files for AI context
+    const fileContexts = [];
     const uploadedDocs = [];
     if (req.files && req.files.length > 0) {
       for (const file of req.files) {
+        const context = await getFileContext(file);
+        if (context) fileContexts.push(context);
+        
+        // Save to DB
         await new Promise((resolve, reject) => {
           db.run(
             'INSERT INTO documents (conversation_id, user_id, filename, original_name, file_size) VALUES (?, ?, ?, ?, ?)',
@@ -228,11 +264,7 @@ app.post('/api/chat', upload.array('files', 10), async (req, res) => {
             (err) => { if (err) reject(err); else resolve(); }
           );
         });
-        uploadedDocs.push({
-          filename: file.filename,
-          original_name: file.originalname,
-          path: file.path,
-        });
+        uploadedDocs.push({ filename: file.filename, original_name: file.originalname });
       }
     }
 
@@ -246,7 +278,7 @@ app.post('/api/chat', upload.array('files', 10), async (req, res) => {
       );
     });
 
-    // Load conversation history from DB
+    // Load history
     const dbMessages = await new Promise((resolve, reject) => {
       db.all(
         'SELECT role, content, attachments FROM messages WHERE conversation_id = ? ORDER BY created_at ASC',
@@ -255,24 +287,18 @@ app.post('/api/chat', upload.array('files', 10), async (req, res) => {
       );
     });
 
-    // Build Gemini contents
-    const geminiMessages = [];
-    for (let i = 0; i < dbMessages.length; i++) {
-      const msg = dbMessages[i];
-      const entry = { role: msg.role, content: msg.content };
-
-      // For the CURRENT message (last one), attach ALL PDFs
-      if (i === dbMessages.length - 1 && uploadedDocs.length > 0) {
-        entry.pdfParts = uploadedDocs.map(doc => ({
-          data: fs.readFileSync(doc.path).toString('base64'),
-          name: doc.original_name,
-        }));
+    const contents = [];
+    for (const msg of dbMessages) {
+      const parts = [{ text: msg.content }];
+      // If this is the current message, add the new file contexts
+      if (msg === dbMessages[dbMessages.length - 1]) {
+        fileContexts.forEach(ctx => {
+          if (ctx.text) parts.push({ text: ctx.text });
+          if (ctx.inlineData) parts.push({ inlineData: ctx.inlineData });
+        });
       }
-
-      geminiMessages.push(entry);
+      contents.push({ role: msg.role, parts });
     }
-
-    const contents = buildGeminiContents(geminiMessages);
 
     // Call Gemini
     console.log(`🧠 NexGen Chat [${convId}]: "${(message || '').substring(0, 80)}..." (${uploadedDocs.length} files)`);

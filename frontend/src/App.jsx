@@ -765,15 +765,16 @@ export default function App() {
                 className="p-3 text-muted hover:text-primary hover:bg-primary/10 rounded-xl transition-all shrink-0"
               >
                 <Paperclip size={20} />
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  id="file-input"
+                  multiple
+                  className="hidden"
+                  accept=".pdf,.xlsx,.xls,.csv"
+                  onChange={handleFileUpload}
+                />
               </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf"
-                multiple
-                onChange={handleFileSelect}
-                className="hidden"
-              />
 
               {/* Text Input */}
               <div className="flex-1 bg-surface/50 border border-white/10 rounded-2xl focus-within:border-primary/50 transition-all overflow-hidden">
