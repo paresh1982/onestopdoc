@@ -693,7 +693,7 @@ export default function App() {
                 </div>
                 <h2 className="text-2xl font-bold mb-2">What do you need from your documents?</h2>
                 <p className="text-muted text-sm mb-8 leading-relaxed">
-                  Upload any PDF — invoices, contracts, white papers, lab reports — and tell me what you need.
+                  Upload any PDF, Excel, or Word file — invoices, contracts, spreadsheets, lab reports — and tell me what you need.
                 </p>
                 <div
                   onClick={() => fileInputRef.current?.click()}
@@ -702,7 +702,10 @@ export default function App() {
                   onDrop={(e) => {
                     e.preventDefault();
                     e.currentTarget.classList.remove('border-primary', 'bg-primary/5');
-                    const files = Array.from(e.dataTransfer.files).filter(f => f.type === 'application/pdf');
+                    const files = Array.from(e.dataTransfer.files).filter(f => {
+                      const ext = f.name.toLowerCase().split('.').pop();
+                      return ['pdf', 'xlsx', 'xls', 'csv', 'docx', 'doc'].includes(ext);
+                    });
                     if (files.length) setAttachedFiles(prev => [...prev, ...files]);
                   }}
                   className="w-full max-w-md border-2 border-dashed border-white/10 hover:border-primary/40 rounded-2xl p-10 cursor-pointer transition-all duration-300 group"
@@ -711,7 +714,7 @@ export default function App() {
                     <div className="w-14 h-14 bg-primary/10 text-primary rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
                       <Paperclip size={28} />
                     </div>
-                    <p className="text-sm font-medium text-white">Drop PDFs here or click to upload</p>
+                    <p className="text-sm font-medium text-white">Drop Documents here or click to upload</p>
                     <p className="text-[11px] text-muted/80">Supports multiple files • Max 20MB each</p>
                   </div>
                 </div>
@@ -771,7 +774,7 @@ export default function App() {
                   id="file-input"
                   multiple
                   className="hidden"
-                  accept=".pdf,.xlsx,.xls,.csv"
+                  accept=".pdf,.xlsx,.xls,.csv,.docx,.doc"
                   onChange={handleFileSelect}
                 />
               </button>

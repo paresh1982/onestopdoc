@@ -106,10 +106,12 @@ const upload = multer({
       'application/pdf',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'application/vnd.ms-excel',
-      'text/csv'
+      'text/csv',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/msword'
     ];
     if (allowed.includes(file.mimetype)) cb(null, true);
-    else cb(new Error('Only PDF, Excel, and CSV files are allowed'), false);
+    else cb(new Error('Only PDF, Word, Excel, and CSV files are allowed'), false);
   },
 });
 
@@ -155,6 +157,13 @@ async function getFileContext(file) {
       });
     });
     return { text: excelText };
+  } else if (file.mimetype.includes('word') || file.originalname.endsWith('.docx') || file.originalname.endsWith('.doc')) {
+    return {
+      inlineData: {
+        data: fs.readFileSync(file.path).toString('base64'),
+        mimeType: file.mimetype,
+      },
+    };
   }
   return null;
 }
