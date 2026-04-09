@@ -22,6 +22,12 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
+// ─── Privacy Middleware ──────────────────────────────────
+app.use((req, res, next) => {
+  req.userId = req.headers['x-user-id'] || 'anonymous';
+  next();
+});
+
 // ─── SQLite Setup ────────────────────────────────────────
 const db = new sqlite3.Database(path.join(__dirname, 'onestopdoc.db'));
 
@@ -29,6 +35,7 @@ db.serialize(() => {
   // Conversations table
   db.run(`CREATE TABLE IF NOT EXISTS conversations (
     id TEXT PRIMARY KEY,
+    user_id TEXT,
     title TEXT DEFAULT 'New Chat',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -49,6 +56,7 @@ db.serialize(() => {
   db.run(`CREATE TABLE IF NOT EXISTS documents (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     conversation_id TEXT,
+    user_id TEXT,
     filename TEXT NOT NULL,
     original_name TEXT NOT NULL,
     file_size INTEGER DEFAULT 0,
@@ -159,19 +167,9 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', service: 'NexGen AI v3.0', version: '3.0.0' });
 });
 
-// Create a new conversation
-app.post('/api/conversations', (req, res) => {
-  const id = 'conv_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
-  const title = req.body.title || 'New Chat';
-  db.run('INSERT INTO conversations (id, title) VALUES (?, ?)', [id, title], function (err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ id, title, created_at: new Date().toISOString() });
-  });
-});
-
-// Get all conversations
+// ─── GET Conversations ───────────────────────────────────
 app.get('/api/conversations', (req, res) => {
-  db.all('SELECT * FROM conversations ORDER BY updated_at DESC LIMIT 50', (err, rows) => {
+  db.all('SELECT * FROM conversations WHERE user_id = ? ORDER BY updated_at DESC LIMIT 100', [req.userId], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
   });
@@ -191,10 +189,13 @@ app.get('/api/conversations/:id/messages', (req, res) => {
 
 // Delete a conversation
 app.delete('/api/conversations/:id', (req, res) => {
-  db.run('DELETE FROM messages WHERE conversation_id = ?', [req.params.id]);
-  db.run('DELETE FROM documents WHERE conversation_id = ?', [req.params.id]);
-  db.run('DELETE FROM conversations WHERE id = ?', [req.params.id], function (err) {
-    if (err) return res.status(500).json({ error: err.message });
+  // First verify ownership
+  db.get('SELECT id FROM conversations WHERE id = ? AND user_id = ?', [req.params.id, req.userId], (err, row) => {
+    if (err || !row) return res.status(403).json({ error: 'Unauthorized to delete this chat.' });
+    
+    db.run('DELETE FROM messages WHERE conversation_id = ?', [req.params.id]);
+    db.run('DELETE FROM documents WHERE conversation_id = ?', [req.params.id]);
+    db.run('DELETE FROM conversations WHERE id = ?', [req.params.id]);
     res.json({ success: true });
   });
 });
@@ -210,7 +211,7 @@ app.post('/api/chat', upload.array('files', 10), async (req, res) => {
       convId = 'conv_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
       const title = message?.substring(0, 60) || 'New Chat';
       await new Promise((resolve, reject) => {
-        db.run('INSERT INTO conversations (id, title) VALUES (?, ?)', [convId, title], (err) => {
+        db.run('INSERT INTO conversations (id, user_id, title) VALUES (?, ?, ?)', [convId, req.userId, title], (err) => {
           if (err) reject(err); else resolve();
         });
       });
@@ -222,8 +223,8 @@ app.post('/api/chat', upload.array('files', 10), async (req, res) => {
       for (const file of req.files) {
         await new Promise((resolve, reject) => {
           db.run(
-            'INSERT INTO documents (conversation_id, filename, original_name, file_size) VALUES (?, ?, ?, ?)',
-            [convId, file.filename, file.originalname, file.size],
+            'INSERT INTO documents (conversation_id, user_id, filename, original_name, file_size) VALUES (?, ?, ?, ?, ?)',
+            [convId, req.userId, file.filename, file.originalname, file.size],
             (err) => { if (err) reject(err); else resolve(); }
           );
         });

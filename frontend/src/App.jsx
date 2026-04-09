@@ -34,6 +34,19 @@ import axios from 'axios';
 
 const API = '/api';
 
+// ─── Simple Multi-User Identity ───
+const UID = (() => {
+  let id = localStorage.getItem('onestop_uid');
+  if (!id) {
+    id = 'user_' + Math.random().toString(36).substr(2, 9);
+    localStorage.setItem('onestop_uid', id);
+  }
+  return id;
+})();
+
+// Set global axios default
+axios.defaults.headers.common['X-User-ID'] = UID;
+
 // ─── Tool Modal (Merge, Split, etc.) ───────────────────────
 function ToolModal({ tool, onClose }) {
   const [files, setFiles] = useState([]);
