@@ -532,7 +532,7 @@ app.post('/api/tools/pdf-to-word', upload.single('file'), async (req, res) => {
           }),
           ...content.split('\n').filter(l => l.trim() !== '').map(line => 
             new Paragraph({
-              children: [new TextRun(line.replace(/#|*/g, ''))],
+              children: [new TextRun(line.replace(/[#*]/g, ''))],
               spacing: { after: 200 },
             })
           ),
