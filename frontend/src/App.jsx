@@ -232,11 +232,22 @@ function ToolModal({ tool, onClose }) {
               <label className="text-[10px] font-bold text-primary uppercase tracking-widest pl-1">New Page Sequence</label>
               <input 
                 type="text"
-                placeholder="e.g. 3, 1, 2, 4 (shuffles pages)"
+                placeholder="e.g. 2, 1, 3"
                 value={sequence}
                 onChange={(e) => setSequence(e.target.value)}
                 className="w-full bg-background border border-border rounded-2xl px-5 py-3 text-sm focus:outline-none focus:border-primary/50 transition-all placeholder:text-muted/30 text-foreground"
               />
+              <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 space-y-2">
+                <div className="flex items-center gap-2 text-[10px] font-bold text-primary uppercase">
+                   <Layout size={12} />
+                   Ordering Guide:
+                </div>
+                <ul className="text-[10px] text-primary/80 space-y-1 ml-4 list-disc font-medium">
+                  <li><strong>Reorder:</strong> List pages as <code className="bg-primary/10 px-1 rounded">2, 1, 3</code> to swap positions.</li>
+                  <li><strong>Delete:</strong> Leave out a number (e.g. <code className="bg-primary/10 px-1 rounded">1, 3</code> deletes page 2).</li>
+                  <li><strong>Duplicate:</strong> Repeat a number (e.g. <code className="bg-primary/10 px-1 rounded">1, 1, 2</code>).</li>
+                </ul>
+              </div>
             </div>
           )}
         </div>
@@ -664,7 +675,7 @@ export default function App() {
                 <div className="space-y-1">
                   {[
                     { id: 'rotate', icon: RotateCw, label: 'Rotate Pages' },
-                    { id: 'reorder', icon: Layout, label: 'Reorder / Delete' },
+                    { id: 'reorder', icon: Layout, label: 'Organize Pages' },
                   ].map(tool => (
                     <button key={tool.id} className="tool-btn" onClick={() => setActiveTool(tool)}>
                       <tool.icon size={14} /> {tool.label}
