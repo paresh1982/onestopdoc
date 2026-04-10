@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: 'class',
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
@@ -7,11 +8,11 @@ export default {
   theme: {
     extend: {
       colors: {
-        background: '#0a0a0a',
-        surface: '#1a1a1a',
+        background: 'var(--background)',
+        surface: 'var(--surface)',
         primary: '#8b5cf6', // Electric Violet
         secondary: '#0ea5e9', // Sky Blue
-        muted: '#e5e5e5',
+        muted: 'var(--muted)',
         success: '#10b981',
         warning: '#f59e0b',
         error: '#ef4444',

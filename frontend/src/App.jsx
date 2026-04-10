@@ -27,7 +27,9 @@ import {
   ArrowRightLeft,
   Layout,
   Settings,
-  HelpCircle
+  HelpCircle,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
@@ -270,15 +272,15 @@ function renderContent(text) {
 
     // Regular text — simple markdown
     return (
-      <div key={i} className="prose prose-invert prose-sm max-w-none">
+      <div key={i} className={`prose prose-sm max-w-none ${document.documentElement.classList.contains('dark') ? 'prose-invert' : ''}`}>
         {part.split('\n').map((line, j) => {
-          if (line.startsWith('### ')) return <h3 key={j} className="text-base font-bold text-white mt-4 mb-1">{line.replace('### ', '')}</h3>;
-          if (line.startsWith('## ')) return <h2 key={j} className="text-lg font-bold text-white mt-4 mb-1">{line.replace('## ', '')}</h2>;
-          if (line.startsWith('# ')) return <h1 key={j} className="text-xl font-bold text-white mt-4 mb-2">{line.replace('# ', '')}</h1>;
-          if (line.startsWith('- ') || line.startsWith('* ')) return <li key={j} className="text-sm text-neutral-200 ml-4 list-disc">{line.replace(/^[-*] /, '')}</li>;
-          if (line.startsWith('**') && line.endsWith('**')) return <p key={j} className="text-sm font-bold text-white">{line.replace(/\*\*/g, '')}</p>;
+          if (line.startsWith('### ')) return <h3 key={j} className="text-base font-bold text-foreground mt-4 mb-1">{line.replace('### ', '')}</h3>;
+          if (line.startsWith('## ')) return <h2 key={j} className="text-lg font-bold text-foreground mt-4 mb-1">{line.replace('## ', '')}</h2>;
+          if (line.startsWith('# ')) return <h1 key={j} className="text-xl font-bold text-foreground mt-4 mb-2">{line.replace('# ', '')}</h1>;
+          if (line.startsWith('- ') || line.startsWith('* ')) return <li key={j} className="text-sm text-foreground/80 ml-4 list-disc">{line.replace(/^[-*] /, '')}</li>;
+          if (line.startsWith('**') && line.endsWith('**')) return <p key={j} className="text-sm font-bold text-foreground">{line.replace(/\*\*/g, '')}</p>;
           if (line.trim() === '') return <br key={j} />;
-          return <p key={j} className="text-sm text-neutral-200 leading-relaxed">{line}</p>;
+          return <p key={j} className="text-sm text-foreground/80 leading-relaxed">{line}</p>;
         })}
       </div>
     );
@@ -319,8 +321,8 @@ function DynamicTable({ data, raw }) {
   };
 
   return (
-    <div className="my-4 bg-black/30 border border-white/5 rounded-2xl overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-2 border-b border-white/5 bg-white/[0.02]">
+    <div className="my-4 bg-surface border border-border rounded-2xl overflow-hidden shadow-sm">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-background/50">
         <span className="text-[10px] text-primary font-bold uppercase tracking-widest flex items-center gap-2">
           <Sparkles size={12} /> Structured Data • {data.length} rows
         </span>
@@ -348,11 +350,11 @@ function DynamicTable({ data, raw }) {
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-white/5">
+          <tbody className="divide-y divide-border">
             {data.map((row, i) => (
-              <tr key={i} className="hover:bg-white/[0.02] transition-colors">
+              <tr key={i} className="hover:bg-background/50 transition-colors">
                 {headers.map(h => (
-                  <td key={h} className="px-4 py-3 text-neutral-200 whitespace-nowrap max-w-[250px] truncate">
+                  <td key={h} className="px-4 py-3 text-foreground/80 whitespace-nowrap max-w-[250px] truncate">
                     {typeof row[h] === 'object' ? JSON.stringify(row[h]) : String(row[h] ?? '—')}
                   </td>
                 ))}
@@ -379,7 +381,7 @@ function ChatMessage({ msg }) {
       className={`flex gap-3 ${isUser ? 'flex-row-reverse' : ''}`}
     >
       <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-1 ${
-        isUser ? 'bg-primary/20 text-primary' : 'bg-surface border border-white/10 text-white'
+        isUser ? 'bg-primary/20 text-primary' : 'bg-surface border border-border text-foreground'
       }`}>
         {isUser ? <User size={16} /> : <Bot size={16} />}
       </div>
@@ -394,7 +396,7 @@ function ChatMessage({ msg }) {
           </div>
         )}
         <div className={`rounded-2xl px-5 py-4 ${
-          isUser ? 'bg-primary/15 border border-primary/20 text-white' : 'bg-surface/50 border border-white/5 text-white'
+          isUser ? 'bg-primary/15 border border-primary/20 text-foreground' : 'bg-surface border border-border text-foreground'
         }`}>
           {isUser ? (
             <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
@@ -414,6 +416,20 @@ function ChatMessage({ msg }) {
 export default function App() {
   const [conversations, setConversations] = useState([]);
   const [activeConvId, setActiveConvId] = useState(null);
+  const [theme, setTheme] = useState(localStorage.getItem('onestop_theme') || 'dark');
+
+  useEffect(() => {
+    localStorage.setItem('onestop_theme', theme);
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [theme]);
+
+  const toggleTheme = () => setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+
+  const chatContainerRef = useRef(null);
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [attachedFiles, setAttachedFiles] = useState([]);
@@ -528,7 +544,7 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-screen bg-background text-white font-sans selection:bg-primary/30">
+    <div className="flex h-screen bg-background text-foreground font-sans selection:bg-primary/30">
       {/* ─── Sidebar ─── */}
       <AnimatePresence>
         {sidebarOpen && (
@@ -536,15 +552,22 @@ export default function App() {
             initial={{ width: 0, opacity: 0 }}
             animate={{ width: 280, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
-            className="border-r border-white/5 flex flex-col bg-black/40 backdrop-blur-xl shrink-0 overflow-hidden"
+            className="border-r border-border flex flex-col bg-surface/50 backdrop-blur-xl shrink-0 overflow-hidden"
           >
-            <div className="p-5 flex items-center justify-between border-b border-white/5">
+            <div className="p-5 flex items-center justify-between border-b border-border">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 bg-gradient-to-br from-primary to-sky-500 rounded-lg flex items-center justify-center shadow-lg shadow-primary/20">
                   <Zap size={18} className="text-white fill-white" />
                 </div>
                 <h1 className="text-lg font-bold tracking-tight">OneStopDoc</h1>
               </div>
+              <button 
+                onClick={toggleTheme}
+                className="p-2 hover:bg-surface rounded-lg text-muted transition-all"
+                title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              >
+                {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+              </button>
             </div>
 
             <div className="p-3">
