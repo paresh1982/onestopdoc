@@ -802,24 +802,50 @@ app.post('/api/tools/pdf-to-word', upload.single('file'), async (req, res) => {
       },
     };
 
-    const prompt = "Extract all text from this PDF and format it as professional, structured content for a Word document. Maintain headers and paragraphs clearly.";
+    const prompt = `Extract all text and tables from this document. 
+    Format the output as a JSON ARRAY of objects where each object is a row. 
+    If there is plain text, include it as a "content" field in a single-column object.
+    Only provide the JSON array.`;
+
     const response = await ai.models.generateContent({
       model: "gemini-2.5-pro",
       contents: [{ role: 'user', parts: [{ text: prompt }, pdfData] }]
     });
 
+    const cleanJson = response.text.replace(/```json\n?/g, '').replace(/```/g, '').trim();
+    const data = JSON.parse(cleanJson);
+    const rows = Array.isArray(data) ? data : [data];
+
     const doc = new Document({
       sections: [{
-        children: response.text.split('\n').map(line => new Paragraph({ 
-          children: [new TextRun(line)], 
-          spacing: { after: 120 } 
-        }))
+        children: [
+          new Paragraph({ text: "OneStopDoc Structural Export", heading: HeadingLevel.TITLE }),
+          new Paragraph({ text: `Generated: ${new Date().toLocaleString()}`, spacing: { after: 400 } }),
+          new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            rows: [
+              // Header
+              new TableRow({
+                children: Object.keys(rows[0]).map(h => new TableCell({
+                  children: [new Paragraph({ text: h.toUpperCase(), bold: true })],
+                  shading: { fill: "F3F4F6", type: ShadingType.CLEAR }
+                }))
+              }),
+              // Data
+              ...rows.map(row => new TableRow({
+                children: Object.values(row).map(val => new TableCell({
+                  children: [new Paragraph({ text: String(val || '') })]
+                }))
+              }))
+            ]
+          })
+        ]
       }]
     });
 
     const buffer = await Packer.toBuffer(doc);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-    res.setHeader('Content-Disposition', 'attachment; filename=NexGen_Export.docx');
+    res.setHeader('Content-Disposition', 'attachment; filename=NexGen_Structural_Export.docx');
     res.send(buffer);
     fs.unlinkSync(req.file.path);
   } catch (err) {
@@ -837,7 +863,14 @@ app.post('/api/tools/pdf-to-excel', upload.single('file'), async (req, res) => {
       },
     };
 
-    const prompt = "Extract all tabular data from this PDF and provide it in a clean JSON ARRAY format. Only provide the array, no other text.";
+    // Use the "Main Chat" power-prompt for PDF to Excel
+    const prompt = `Act as an enterprise-grade OCR engine. 
+    1. Extract all line-items from tables. 
+    2. Split multiple rows if they exist in a single cell. 
+    3. Retain parent metadata (Date, Invoice #) in every row. 
+    4. Format as a clean JSON ARRAY of objects. 
+    5. ONLY provide the JSON array.`;
+
     const response = await ai.models.generateContent({
       model: "gemini-2.5-pro",
       contents: [{ role: 'user', parts: [{ text: prompt }, pdfData] }]
@@ -848,14 +881,30 @@ app.post('/api/tools/pdf-to-excel', upload.single('file'), async (req, res) => {
     const rows = Array.isArray(data) ? data : [data];
 
     const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet('Extraction');
+    const sheet = workbook.addWorksheet('Structural Extraction');
+    
     const headers = Object.keys(rows[0]);
     sheet.columns = headers.map(h => ({ header: h.toUpperCase(), key: h }));
+    
+    // Pro Styling (Primary Brand Color)
+    sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF8B5CF6' } };
+    
     sheet.addRows(rows);
+
+    // Auto-fit columns
+    sheet.columns.forEach(column => {
+      let maxLen = column.header.length;
+      column.eachCell({ includeEmpty: true }, (cell) => {
+        const len = cell.value ? cell.value.toString().length : 0;
+        if (len > maxLen) maxLen = len;
+      });
+      column.width = Math.min(maxLen + 2, 50);
+    });
 
     const buffer = await workbook.xlsx.writeBuffer();
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename=NexGen_Extraction.xlsx');
+    res.setHeader('Content-Disposition', 'attachment; filename=NexGen_LineItem_Export.xlsx');
     res.send(buffer);
     fs.unlinkSync(req.file.path);
   } catch (err) {
