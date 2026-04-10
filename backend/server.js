@@ -18,7 +18,8 @@ const { GoogleGenAI } = require('@google/genai');
 const sqlite3 = require('sqlite3').verbose();
 const ExcelJS = require('exceljs');
 const { Document, Packer, Paragraph, TextRun, HeadingLevel } = require('docx');
-const { PDFDocument, rgb, degrees, StandardFonts } = require('pdf-lib');
+const pdflib = require('pdf-lib');
+const { PDFDocument, rgb, degrees, StandardFonts } = pdflib;
 const archiver = require('archiver');
 
 // ─── Config ──────────────────────────────────────────────
@@ -733,8 +734,20 @@ app.post('/api/tools/rotate', upload.single('file'), async (req, res) => {
     
     const rot = parseInt(degrees) || 90;
     pages.forEach(page => {
-      const currentRotation = page.getRotation().angle;
-      page.setRotation(degrees((currentRotation + rot) % 360));
+      let currentRotation = 0;
+      try {
+        const r = page.getRotation();
+        currentRotation = (typeof r === 'object' ? r.angle : r) || 0;
+      } catch (e) { currentRotation = 0; }
+      
+      const newAngle = (currentRotation + rot) % 360;
+      
+      if (typeof degrees === 'function') {
+        page.setRotation(degrees(newAngle));
+      } else {
+        // Fallback for older versions or binding issues
+        page.setRotation({ angle: newAngle, type: 'degrees' });
+      }
     });
 
     const outBytes = await pdf.save();
