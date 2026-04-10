@@ -127,25 +127,54 @@ function ToolModal({ tool, onClose }) {
           </button>
         </div>
 
-        <div className="p-8 overflow-y-auto custom-scrollbar">
-          <div
-            onClick={() => document.getElementById('tool-file-input').click()}
-            className="border-2 border-dashed border-border hover:border-primary/40 rounded-3xl p-12 cursor-pointer transition-all text-center group bg-background/30"
-          >
-            <input
-              id="tool-file-input"
-              type="file"
-              multiple={tool.id === 'merge'}
-              accept=".pdf"
-              className="hidden"
-              onChange={(e) => setFiles(Array.from(e.target.files))}
-            />
-            <div className="w-16 h-16 bg-surface/50 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
-              <Paperclip size={32} className="text-muted group-hover:text-primary" />
+        <div className="p-8 overflow-y-auto custom-scrollbar flex-1">
+          {files.length === 0 ? (
+            <div
+              onClick={() => document.getElementById('tool-file-input').click()}
+              className="border-2 border-dashed border-border hover:border-primary/40 rounded-3xl p-12 cursor-pointer transition-all text-center group bg-background/30"
+            >
+              <input
+                id="tool-file-input"
+                type="file"
+                multiple={tool.id === 'merge'}
+                accept=".pdf"
+                className="hidden"
+                onChange={(e) => setFiles(Array.from(e.target.files))}
+              />
+              <div className="flex flex-col items-center gap-4">
+                <div className="w-16 h-16 bg-primary/10 text-primary rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <Paperclip size={32} />
+                </div>
+                <div>
+                  <p className="text-base font-bold text-foreground mb-1">Select your PDF files</p>
+                  <p className="text-[11px] text-muted/60">Drag & drop or click to browser</p>
+                </div>
+              </div>
             </div>
-            <p className="font-medium mb-1">Select your PDF files</p>
-            <p className="text-xs text-muted">Drag & drop or click to browser</p>
-          </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-4 bg-primary/5 border border-primary/20 rounded-2xl">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-primary/10 text-primary rounded-xl flex items-center justify-center">
+                    <FileText size={24} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-foreground truncate max-w-[200px]">{files[0].name}</p>
+                    <p className="text-[10px] text-primary font-bold uppercase tracking-widest">Document Selected</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setFiles([])}
+                  className="p-2 hover:bg-red-500/10 text-red-400 rounded-lg transition-colors"
+                >
+                  <Trash2 size={18} />
+                </button>
+              </div>
+              {files.length > 1 && (
+                <p className="text-[10px] text-muted text-center italic">+ {files.length - 1} more files staged</p>
+              )}
+            </div>
+          )}
 
           {files.length > 0 && tool.id === 'split' && (
             <div className="mt-8 space-y-3">
@@ -170,6 +199,12 @@ function ToolModal({ tool, onClose }) {
                 onChange={(e) => setInstructions(e.target.value)}
                 className="w-full bg-background border border-border rounded-2xl px-5 py-3 text-sm focus:outline-none focus:border-primary/50 transition-all placeholder:text-muted/30 min-h-[100px] resize-none text-foreground"
               />
+              <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 flex items-start gap-3">
+                <Settings size={14} className="text-primary shrink-0 mt-0.5" />
+                <p className="text-[10px] text-primary/80 leading-relaxed font-medium">
+                  Smart Redraft generates a clean, standardized document based on your instructions. To preserve complex bank layouts or logos, use <span className="underline font-bold">Convert to Word</span> instead.
+                </p>
+              </div>
             </div>
           )}
 
@@ -202,24 +237,6 @@ function ToolModal({ tool, onClose }) {
                 onChange={(e) => setSequence(e.target.value)}
                 className="w-full bg-background border border-border rounded-2xl px-5 py-3 text-sm focus:outline-none focus:border-primary/50 transition-all placeholder:text-muted/30 text-foreground"
               />
-              <p className="text-[10px] text-muted/40 px-2 italic">Identify pages by their current numbers separated by commas.</p>
-            </div>
-          )}
-
-          {files.length > 0 && (
-            <div className="mt-8 space-y-2 overflow-y-auto max-h-[200px] custom-scrollbar">
-              <p className="text-[10px] font-bold text-primary uppercase tracking-widest pl-1">Selected Files</p>
-              {files.map((f, i) => (
-                <div key={i} className="flex items-center justify-between bg-white/[0.02] border border-white/5 p-3 rounded-xl">
-                  <div className="flex items-center gap-3 overflow-hidden">
-                    <FileText size={16} className="text-primary shrink-0" />
-                    <span className="text-sm truncate">{f.name}</span>
-                  </div>
-                  <button onClick={() => setFiles(prev => prev.filter((_, j) => j !== i))} className="p-1 hover:text-red-400">
-                    <X size={14} />
-                  </button>
-                </div>
-              ))}
             </div>
           )}
         </div>
@@ -234,7 +251,7 @@ function ToolModal({ tool, onClose }) {
             className="flex-1 py-3 px-6 rounded-xl font-bold text-sm bg-primary hover:bg-primary/90 text-white transition-all shadow-lg shadow-primary/20 disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {isProcessing ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-            {isProcessing ? 'Processing...' : `Run ${tool.label}`}
+            {isProcessing ? 'Processing...' : (tool.id === 'edit' ? 'Start Redraft' : `Run ${tool.label}`)}
           </button>
         </div>
       </motion.div>
@@ -632,7 +649,7 @@ export default function App() {
                 <p className="px-3 text-[10px] font-bold text-muted/50 uppercase tracking-widest mb-2">Core Editing</p>
                 <div className="space-y-1">
                   {[
-                    { id: 'edit', icon: Type, label: 'Edit Content' },
+                    { id: 'edit', icon: Type, label: 'A.I. Smart Redraft' },
                   ].map(tool => (
                     <button key={tool.id} className="tool-btn" onClick={() => setActiveTool(tool)}>
                       <tool.icon size={14} /> {tool.label}
