@@ -655,6 +655,22 @@ export default function App() {
                 </div>
               </div>
 
+              {/* --- Conversion --- */}
+              <div>
+                <p className="px-3 text-[10px] font-bold text-muted/50 uppercase tracking-widest mb-2">Conversion</p>
+                <div className="space-y-1">
+                  {[
+                    { id: 'pdf-to-word', icon: FileType, label: 'PDF to Word' },
+                    { id: 'pdf-to-excel', icon: FileSpreadsheet, label: 'PDF to Excel' },
+                    { id: 'excel-to-pdf', icon: ArrowRightLeft, label: 'Excel to PDF' },
+                  ].map(tool => (
+                    <button key={tool.id} className="tool-btn" onClick={() => setActiveTool(tool)}>
+                      <tool.icon size={14} /> {tool.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* --- Core Editing --- */}
               <div>
                 <p className="px-3 text-[10px] font-bold text-muted/50 uppercase tracking-widest mb-2">Core Editing</p>
@@ -676,22 +692,6 @@ export default function App() {
                   {[
                     { id: 'rotate', icon: RotateCw, label: 'Rotate Pages' },
                     { id: 'reorder', icon: Layout, label: 'Organize Pages' },
-                  ].map(tool => (
-                    <button key={tool.id} className="tool-btn" onClick={() => setActiveTool(tool)}>
-                      <tool.icon size={14} /> {tool.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* --- Conversion --- */}
-              <div>
-                <p className="px-3 text-[10px] font-bold text-muted/50 uppercase tracking-widest mb-2">Conversion</p>
-                <div className="space-y-1">
-                  {[
-                    { id: 'pdf-to-word', icon: FileType, label: 'PDF to Word' },
-                    { id: 'pdf-to-excel', icon: FileSpreadsheet, label: 'PDF to Excel' },
-                    { id: 'excel-to-pdf', icon: ArrowRightLeft, label: 'Excel to PDF' },
                   ].map(tool => (
                     <button key={tool.id} className="tool-btn" onClick={() => setActiveTool(tool)}>
                       <tool.icon size={14} /> {tool.label}
