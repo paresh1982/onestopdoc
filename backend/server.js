@@ -488,7 +488,7 @@ app.post('/api/tools/pdf-to-excel', upload.single('file'), async (req, res) => {
     const pdfData = {
       inlineData: {
         data: fs.readFileSync(req.file.path).toString('base64'),
-        mimetype: 'application/pdf',
+        mimeType: 'application/pdf',
       },
     };
 
@@ -528,7 +528,7 @@ app.post('/api/tools/pdf-to-word', upload.single('file'), async (req, res) => {
     const pdfData = {
       inlineData: {
         data: fs.readFileSync(req.file.path).toString('base64'),
-        mimetype: 'application/pdf',
+        mimeType: 'application/pdf',
       },
     };
 
@@ -638,7 +638,7 @@ app.post('/api/tools/edit', upload.single('file'), async (req, res) => {
     const pdfData = {
       inlineData: {
         data: fs.readFileSync(req.file.path).toString('base64'),
-        mimetype: 'application/pdf',
+        mimeType: 'application/pdf',
       },
     };
 
