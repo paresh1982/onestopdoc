@@ -795,9 +795,20 @@ app.post('/api/tools/reorder', upload.single('file'), async (req, res) => {
 // ─── TOOL HELPER: Clean JSON Extraction ──────────────
 const extractCleanJson = (raw) => {
   try {
-    const jsonMatch = raw.match(/\[[\s\S]*\]|\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("No JSON structure found");
-    return JSON.parse(jsonMatch[0]);
+    // Strip possible markdown code blocks
+    const stripped = raw.replace(/```json\n?|```/g, '').trim();
+    // Find first [ or { and last ] or }
+    const firstBracket = stripped.indexOf('[');
+    const firstBrace = stripped.indexOf('{');
+    const first = (firstBracket !== -1 && (firstBrace === -1 || firstBracket < firstBrace)) ? firstBracket : firstBrace;
+    
+    const lastBracket = stripped.lastIndexOf(']');
+    const lastBrace = stripped.lastIndexOf('}');
+    const last = (lastBracket !== -1 && (lastBrace === -1 || lastBracket > lastBrace)) ? lastBracket : lastBrace;
+
+    if (first === -1 || last === -1) throw new Error("No JSON found");
+    const jsonStr = stripped.substring(first, last + 1);
+    return JSON.parse(jsonStr);
   } catch (e) {
     // Aggressive line-by-line fallback for markdown pipe tables if AI fails JSON
     if (raw.includes('|')) {
@@ -835,7 +846,7 @@ app.post('/api/tools/pdf-to-word', upload.single('file'), async (req, res) => {
     Group text into: "h1" (Main Titles), "h2" (Section Headers), "paragraph" (Normal text), or "table" (Grid data).
     For tables, provide a 2D array of strings. 
     FORMAT: JSON array of { "type": "h1"|"h2"|"paragraph"|"table", "content": "..." | [[row1], [row2]] }.
-    Only provide the JSON array.`;
+    CRITICAL: ONLY provide the raw JSON. No markdown, no pipes, no dashes, no conversational text.`;
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-pro",
@@ -881,9 +892,10 @@ app.post('/api/tools/pdf-to-excel', upload.single('file'), async (req, res) => {
   try {
     const inputData = getMultimodalData(req.file.path);
     const prompt = `Act as a visual mirror engine. Extract all tabular data exactly as it appears.
-    IF it is a vertical form (Labels on left), return a 2-column mapping [{ "Field": "Value" }].
-    IF it is horizontal, return an array of objects.
-    Only provide clean JSON array.`;
+    IF it is a vertical form (Labels on left), return a 2nd-column mapping for values. 
+    Result must be an array of arrays: [["Label1", "Value1"], ["Label2", "Value2"]].
+    IF it is a standard horizontal table, return a JSON array of objects.
+    CRITICAL: ONLY provide the raw JSON. No markdown markers.`;
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-pro",
@@ -963,29 +975,34 @@ app.post('/api/tools/word-to-pdf', upload.single('file'), async (req, res) => {
     const text = result.value;
 
     const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage([600, 800]);
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     
-    // Header
-    page.drawRectangle({ x: 0, y: 740, width: 600, height: 60, color: rgb(0.04, 0.04, 0.04) });
-    page.drawText('NexGen WORD TO PDF', { x: 50, y: 765, size: 14, font, color: rgb(1, 1, 1) });
+    // Header Branding
+    const page = pdfDoc.addPage([600, 842]);
+    let y = 780;
+    page.drawRectangle({ x: 0, y: 800, width: 600, height: 42, color: rgb(0.1, 0.1, 0.1) });
+    page.drawText('OneStopDoc WORD TO PDF EXPORT', { x: 50, y: 815, size: 10, font: fontBold, color: rgb(1, 1, 1) });
 
-    // Draw lines with basic wrapping
-    let y = 700;
-    const lines = text.split('\n').filter(l => l.trim());
-    for (const line of lines) {
-      if (y < 50) break;
-      page.drawText(line.substring(0, 100), { x: 50, y, size: 9, font });
-      y -= 15;
+    const paragraphs = text.split('\n').filter(p => p.trim());
+    for (const p of paragraphs) {
+      if (y < 40) break;
+      const lines = p.match(/.{1,95}/g) || [p];
+      for (const line of lines) {
+        if (y < 40) break;
+        page.drawText(line, { x: 50, y, size: 8.5, font });
+        y -= 13;
+      }
+      y -= 10; // Paragraph spacing
     }
 
     const pdfBytes = await pdfDoc.save();
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'attachment; filename=Word_Converted.pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename=OneStopDoc_Word_Export.pdf');
     res.send(Buffer.from(pdfBytes));
     fs.unlinkSync(req.file.path);
   } catch (err) {
-    res.status(500).json({ error: 'PDF conversion failed', details: err.message });
+    res.status(500).json({ error: 'Word to PDF failed', details: err.message });
   }
 });
 
