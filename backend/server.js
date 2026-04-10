@@ -803,11 +803,9 @@ app.post('/api/tools/pdf-to-word', upload.single('file'), async (req, res) => {
     };
 
     const prompt = `Extract all text and tables from this document. 
-    Format the output as a JSON ARRAY of objects. 
-    CRITICAL: Act as a visual mirror. 
-    1. Do NOT split line items.
-    2. Do NOT duplicate metadata or repeat headers.
-    3. Maintain the EXACT row and column structure as seen visually in the PDF.
+    1. If the table is Vertical (Labels on Left, Values on Right), extract as a JSON ARRAY of { "Field": "Value" } objects.
+    2. Maintain the exact visual sequence. 
+    3. Do NOT merge rows into a single entry. 
     Only provide the JSON array.`;
 
     const response = await ai.models.generateContent({
@@ -823,17 +821,19 @@ app.post('/api/tools/pdf-to-word', upload.single('file'), async (req, res) => {
       sections: [{
         children: [
           new Paragraph({ text: "OneStopDoc Visual Export", heading: HeadingLevel.TITLE }),
-          new Paragraph({ text: `Generated: ${new Date().toLocaleString()}`, spacing: { after: 400 } }),
           new Table({
             width: { size: 100, type: WidthType.PERCENTAGE },
-            rows: [
-              // Data Rows (Direct Visual Mapping)
-              ...rows.map(row => new TableRow({
-                children: Object.values(row).map(val => new TableCell({
-                  children: [new Paragraph({ text: String(val || '') })]
-                }))
+            rows: rows.map(row => new TableRow({
+              children: Object.entries(row).map(([key, val]) => new TableCell({
+                width: { size: 50, type: WidthType.PERCENTAGE },
+                children: [new Paragraph({ 
+                  children: [
+                    new TextRun({ text: key + ": ", bold: true }),
+                    new TextRun({ text: String(val || '') })
+                  ]
+                })]
               }))
-            ]
+            }))
           })
         ]
       }]
@@ -841,7 +841,7 @@ app.post('/api/tools/pdf-to-word', upload.single('file'), async (req, res) => {
 
     const buffer = await Packer.toBuffer(doc);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-    res.setHeader('Content-Disposition', 'attachment; filename=NexGen_Visual_Export.docx');
+    res.setHeader('Content-Disposition', 'attachment; filename=NexGen_Document_Mirror.docx');
     res.send(buffer);
     fs.unlinkSync(req.file.path);
   } catch (err) {
@@ -859,12 +859,12 @@ app.post('/api/tools/pdf-to-excel', upload.single('file'), async (req, res) => {
       },
     };
 
-    const prompt = `Act as a visual replica engine. 
-    1. Extract all tabular data as it appears visually.
-    2. Do NOT split rows or cells.
-    3. Do NOT repeat or duplicate any data.
-    4. Maintain the exact row sequence and column alignment of the PDF.
-    5. ONLY provide the clean JSON ARRAY format.`;
+    const prompt = `Act as a visual mirror engine. 
+    1. If the PDF has a vertical form (labels on left), create a 2-column mapping.
+    2. Extract each field as a separate row in the JSON array.
+    3. Format: [{ "Label": "Field Name", "Value": "Data" }, ...]
+    4. Maintain the exact vertical sequence of the document.
+    ONLY provide the clean JSON array.`;
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-pro",
@@ -878,25 +878,20 @@ app.post('/api/tools/pdf-to-excel', upload.single('file'), async (req, res) => {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Visual Extraction');
     
-    // Auto-map columns from first row
-    const headers = Object.keys(rows[0]);
-    sheet.columns = headers.map(h => ({ header: '', key: h })); // No extra header row unless in data
-    
-    sheet.addRows(rows);
-
-    // Auto-fit columns
-    sheet.columns.forEach(column => {
-      let maxLen = 10;
-      column.eachCell({ includeEmpty: true }, (cell) => {
-        const len = cell.value ? cell.value.toString().length : 0;
-        if (len > maxLen) maxLen = len;
-      });
-      column.width = Math.min(maxLen + 2, 60);
+    // No headers, direct visual mapping
+    rows.forEach(row => {
+      const values = Object.values(row);
+      sheet.addRow(values);
     });
+
+    // Styling & Formatting
+    sheet.getColumn(1).font = { bold: true };
+    sheet.getColumn(1).width = 30;
+    sheet.getColumn(2).width = 50;
 
     const buffer = await workbook.xlsx.writeBuffer();
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename=NexGen_Visual_Mirror.xlsx');
+    res.setHeader('Content-Disposition', 'attachment; filename=NexGen_Excel_Mirror.xlsx');
     res.send(buffer);
     fs.unlinkSync(req.file.path);
   } catch (err) {

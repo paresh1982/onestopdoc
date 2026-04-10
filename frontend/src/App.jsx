@@ -148,7 +148,11 @@ function ToolModal({ tool, onClose }) {
                 </div>
                 <div>
                   <p className="text-base font-bold text-foreground mb-1">
-                    Select your {tool.id.includes('excel') ? 'Excel' : tool.id.includes('word') ? 'Word' : 'PDF'} files
+                    Select your {
+                      tool.id.startsWith('pdf-to-') ? 'PDF' : 
+                      tool.id.startsWith('excel-to-') ? 'Excel' : 
+                      tool.id.startsWith('word-to-') ? 'Word' : 'PDF'
+                    } files
                   </p>
                   <p className="text-[11px] text-muted/60">Drag & drop or click to browser</p>
                 </div>
