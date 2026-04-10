@@ -18,7 +18,7 @@ const { GoogleGenAI } = require('@google/genai');
 const sqlite3 = require('sqlite3').verbose();
 const ExcelJS = require('exceljs');
 const { Document, Packer, Paragraph, TextRun, HeadingLevel } = require('docx');
-const { PDFDocument } = require('pdf-lib');
+const { PDFDocument, rgb, degrees, StandardFonts } = require('pdf-lib');
 const archiver = require('archiver');
 
 // ─── Config ──────────────────────────────────────────────
@@ -654,19 +654,66 @@ app.post('/api/tools/edit', upload.single('file'), async (req, res) => {
     });
     const editedText = response.text;
 
-    // For now, we return a new PDF with the AI-edited content
-    // In a future phase, we would use pdf-lib to overwrite specific offsets
     const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage([600, 800]);
-    page.drawText('OneStopDoc A.I. Edited Document', { x: 50, y: 750, size: 10 });
-    page.drawText(editedText.substring(0, 2000), { x: 50, y: 700, size: 8, lineHeight: 12 });
+    const { width, height } = { width: 600, height: 800 };
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    
+    let page = pdfDoc.addPage([width, height]);
+    let y = height - 50;
+
+    // --- Header ---
+    page.drawRectangle({ x: 0, y: height - 60, width, height: 60, color: rgb(0.04, 0.04, 0.04) });
+    page.drawText('NexGen A.I. SMART REDRAFT', { x: 50, y: height - 35, size: 14, font: fontBold, color: rgb(1, 1, 1) });
+    page.drawText(`Redrafted on: ${new Date().toLocaleDateString()}`, { x: width - 200, y: height - 35, size: 8, font, color: rgb(0.8, 0.8, 0.8) });
+
+    // --- Page Border ---
+    page.drawRectangle({ x: 20, y: 20, width: width - 40, height: height - 80, borderColor: rgb(0.9, 0.9, 0.9), borderWidth: 1 });
+
+    y -= 40; // Move below header
+
+    // --- Content with Line Wrapping ---
+    const lines = editedText.split('\n');
+    const margin = 50;
+    const maxWidth = width - (margin * 2);
+
+    for (const line of lines) {
+      if (y < 80) { // New page if near bottom
+        page = pdfDoc.addPage([width, height]);
+        page.drawRectangle({ x: 20, y: 20, width: width - 40, height: height - 40, borderColor: rgb(0.9, 0.9, 0.9), borderWidth: 1 });
+        y = height - 50;
+      }
+
+      // Simple word wrap
+      const words = line.split(' ');
+      let currentLine = '';
+      
+      for (const word of words) {
+        const testLine = currentLine + (currentLine ? ' ' : '') + word;
+        const textWidth = font.widthOfTextAtSize(testLine, 9);
+        
+        if (textWidth > maxWidth) {
+          page.drawText(currentLine, { x: margin, y, size: 9, font, color: rgb(0.1, 0.1, 0.1) });
+          y -= 14;
+          currentLine = word;
+          if (y < 80) break; // Simplified page break check
+        } else {
+          currentLine = testLine;
+        }
+      }
+      
+      if (currentLine) {
+        page.drawText(currentLine, { x: margin, y, size: 9, font, color: rgb(0.1, 0.1, 0.1) });
+        y -= 18; // Extra padding between paragraphs
+      }
+    }
 
     const pdfBytes = await pdfDoc.save();
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'attachment; filename=OneStopDoc_Edited.pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename=Smart_Redraft_Export.pdf');
     res.send(Buffer.from(pdfBytes));
     
-    fs.unlinkSync(req.file.path);
+    if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
   } catch (err) {
     res.status(500).json({ error: 'Editing failed', details: err.message });
   }
@@ -687,7 +734,7 @@ app.post('/api/tools/rotate', upload.single('file'), async (req, res) => {
     const rot = parseInt(degrees) || 90;
     pages.forEach(page => {
       const currentRotation = page.getRotation().angle;
-      page.setRotation({ angle: (currentRotation + rot) % 360 });
+      page.setRotation(degrees((currentRotation + rot) % 360));
     });
 
     const outBytes = await pdf.save();
