@@ -138,7 +138,11 @@ function ToolModal({ tool, onClose }) {
                 id="tool-file-input"
                 type="file"
                 multiple={tool.id === 'merge'}
-                accept={tool.id.includes('excel') ? '.xlsx,.xls' : tool.id.includes('word') ? '.docx' : '.pdf'}
+                accept={
+                  tool.id.includes('excel-to') ? '.xlsx, .xls' : 
+                  tool.id.includes('word-to') ? '.docx, .doc' : 
+                  tool.id.startsWith('pdf-to-') ? '.pdf, .png, .jpg, .jpeg' : '.pdf'
+                }
                 className="hidden"
                 onChange={(e) => setFiles(Array.from(e.target.files))}
               />
@@ -149,7 +153,7 @@ function ToolModal({ tool, onClose }) {
                 <div>
                   <p className="text-base font-bold text-foreground mb-1">
                     Select your {
-                      tool.id.startsWith('pdf-to-') ? 'PDF' : 
+                      tool.id.startsWith('pdf-to-') ? 'PDF or Image' : 
                       tool.id.startsWith('excel-to-') ? 'Excel' : 
                       tool.id.startsWith('word-to-') ? 'Word' : 'PDF'
                     } files

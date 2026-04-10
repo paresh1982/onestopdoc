@@ -792,23 +792,35 @@ app.post('/api/tools/reorder', upload.single('file'), async (req, res) => {
   }
 });
 
-// ─── PDF TOOL: PDF to Word ───────────────────────────────
+// ─── TOOL HELPER: Multimodal Data Resolver ──────────────
+const getMultimodalData = (filePath) => {
+  const ext = path.extname(filePath).toLowerCase();
+  const base64 = fs.readFileSync(filePath).toString('base64');
+  const mimeMap = {
+    '.pdf': 'application/pdf',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg'
+  };
+  return {
+    inlineData: {
+      data: base64,
+      mimeType: mimeMap[ext] || 'application/pdf'
+    }
+  };
+};
+
+// ─── PDF TOOL: PDF to Word (Supports Images) ─────────────
 app.post('/api/tools/pdf-to-word', upload.single('file'), async (req, res) => {
   try {
-    const pdfData = {
-      inlineData: {
-        data: fs.readFileSync(req.file.path).toString('base64'),
-        mimeType: 'application/pdf',
-      },
-    };
-
-    const prompt = `Act as an expert document formatter. Extract text, headings, and tables. 
+    const inputData = getMultimodalData(req.file.path);
+    const prompt = `Act as an expert document formatter. Extract text, headings, and tables from this ${inputData.inlineData.mimeType.startsWith('image') ? 'image' : 'document'}. 
     Format as a JSON ARRAY of blocks: { "type": "paragraph"|"h1"|"h2"|"table", "content": "text" | [rows] }.
-    Differentiate headings from normal text. Only provide the JSON array.`;
+    Differentiate headings from normal text. Maintain visual structure. Only provide the JSON array.`;
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-pro",
-      contents: [{ role: 'user', parts: [{ text: prompt }, pdfData] }]
+      contents: [{ role: 'user', parts: [{ text: prompt }, inputData] }]
     });
 
     const cleanJson = response.text.replace(/```json\n?/g, '').replace(/```/g, '').trim();
@@ -817,23 +829,10 @@ app.post('/api/tools/pdf-to-word', upload.single('file'), async (req, res) => {
     const doc = new Document({
       sections: [{
         children: blocks.map(block => {
-          if (block.type === 'h1') {
-            return new Paragraph({
-              text: block.content,
-              heading: HeadingLevel.HEADING_1,
-              spacing: { before: 400, after: 200 },
-            });
-          }
-          if (block.type === 'h2') {
-            return new Paragraph({
-              text: block.content,
-              heading: HeadingLevel.HEADING_2,
-              spacing: { before: 300, after: 150 },
-            });
-          }
+          if (block.type === 'h1') return new Paragraph({ text: block.content, heading: HeadingLevel.HEADING_1, spacing: { before: 400, after: 200 } });
+          if (block.type === 'h2') return new Paragraph({ text: block.content, heading: HeadingLevel.HEADING_2, spacing: { before: 300, after: 150 } });
           if (block.type === 'table') {
             const rows = Array.isArray(block.content) ? block.content : [];
-            if (rows.length === 0) return new Paragraph({ text: "" });
             return new Table({
               width: { size: 100, type: WidthType.PERCENTAGE },
               rows: rows.map(row => new TableRow({
@@ -843,23 +842,20 @@ app.post('/api/tools/pdf-to-word', upload.single('file'), async (req, res) => {
               }))
             });
           }
-          return new Paragraph({
-            children: [new TextRun({ text: block.content || "", size: 22 })],
-            spacing: { after: 200 }
-          });
+          return new Paragraph({ children: [new TextRun({ text: block.content || "", size: 22 })], spacing: { after: 200 } });
         }).flat()
       }],
       styles: {
         default: {
-          heading1: { run: { size: 32, bold: true, color: "2563EB", font: "Helvetica" } },
-          heading2: { run: { size: 26, bold: true, color: "1E40AF", font: "Helvetica" } },
+          heading1: { run: { size: 32, bold: true, color: "2563EB" } },
+          heading2: { run: { size: 26, bold: true, color: "1E40AF" } },
         }
       }
     });
 
     const buffer = await Packer.toBuffer(doc);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-    res.setHeader('Content-Disposition', 'attachment; filename=OneStopDoc_Pro_Export.docx');
+    res.setHeader('Content-Disposition', 'attachment; filename=OneStopDoc_Doc_Export.docx');
     res.send(buffer);
     fs.unlinkSync(req.file.path);
   } catch (err) {
@@ -867,49 +863,57 @@ app.post('/api/tools/pdf-to-word', upload.single('file'), async (req, res) => {
   }
 });
 
-// ─── PDF TOOL: PDF to Excel ──────────────────────────────
+// ─── PDF TOOL: PDF to Excel (Supports Images) ────────────
 app.post('/api/tools/pdf-to-excel', upload.single('file'), async (req, res) => {
   try {
-    const pdfData = {
-      inlineData: {
-        data: fs.readFileSync(req.file.path).toString('base64'),
-        mimeType: 'application/pdf',
-      },
-    };
-
-    const prompt = `Extract all tables from this document visually. 
-    Maintain exact row/column mapping. 
-    Format as a clean JSON ARRAY. ONLY provide the JSON array.`;
+    const inputData = getMultimodalData(req.file.path);
+    const prompt = `Act as a visual mirror engine. Extract all tabular data from this ${inputData.inlineData.mimeType.startsWith('image') ? 'image' : 'document'} exactly as it appears.
+    Maintain exact row/column mapping. Format as a clean JSON ARRAY. ONLY provide the JSON array.`;
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-pro",
-      contents: [{ role: 'user', parts: [{ text: prompt }, pdfData] }]
+      contents: [{ role: 'user', parts: [{ text: prompt }, inputData] }]
     });
 
     const cleanJson = response.text.replace(/```json\n?/g, '').replace(/```/g, '').trim();
     const rows = JSON.parse(cleanJson);
 
     const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet('Visual Extraction');
+    const sheet = workbook.addWorksheet('Extraction');
     rows.forEach(row => sheet.addRow(Object.values(row)));
-
-    // Auto-fit & Pro Style
-    sheet.columns.forEach(column => {
-      let maxLen = 10;
-      column.eachCell({ includeEmpty: true }, (cell) => {
-        const len = cell.value ? cell.value.toString().length : 0;
-        if (len > maxLen) maxLen = len;
-      });
-      column.width = Math.min(maxLen + 2, 50);
-    });
 
     const buffer = await workbook.xlsx.writeBuffer();
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename=OneStopDoc_Mirror.xlsx');
+    res.setHeader('Content-Disposition', 'attachment; filename=OneStopDoc_Data.xlsx');
     res.send(buffer);
     fs.unlinkSync(req.file.path);
   } catch (err) {
     res.status(500).json({ error: 'Excel conversion failed', details: err.message });
+  }
+});
+
+// ─── PDF TOOL: Image to PDF ──────────────────────────────
+app.post('/api/tools/image-to-pdf', upload.single('file'), async (req, res) => {
+  try {
+    const pdfDoc = await PDFDocument.create();
+    const imageBytes = fs.readFileSync(req.file.path);
+    const ext = path.extname(req.file.path).toLowerCase();
+    
+    let image;
+    if (ext === '.png') image = await pdfDoc.embedPng(imageBytes);
+    else image = await pdfDoc.embedJpg(imageBytes);
+
+    const { width, height } = image.scale(1);
+    const page = pdfDoc.addPage([width, height]);
+    page.drawImage(image, { x: 0, y: 0, width, height });
+
+    const pdfBytes = await pdfDoc.save();
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename=Converted_Image.pdf');
+    res.send(Buffer.from(pdfBytes));
+    fs.unlinkSync(req.file.path);
+  } catch (err) {
+    res.status(500).json({ error: 'Image to PDF failed', details: err.message });
   }
 });
 
