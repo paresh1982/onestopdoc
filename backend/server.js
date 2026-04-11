@@ -186,8 +186,9 @@ async function getFileContext(file) {
 
 async function callGemini(contents, maxRetries = 3) {
   const models = [
-    'gemini-2.5-pro',
+    'gemini-3.1-pro-preview',
     'gemini-3-flash-preview',
+    'gemini-2.5-pro',
     'gemini-2.5-flash'
   ];
 
