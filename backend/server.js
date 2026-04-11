@@ -860,14 +860,19 @@ app.post('/api/tools/pdf-to-excel', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Please upload a PDF or Image.' });
     const inputData = getMultimodalData(req.file.path);
-    const prompt = `Act as a Visual Data Architect. Extract ALL tabular data exactly as it appears.
-    Maintain the original column order.
+    const prompt = `Act as a Visual Data Architect for Excel. 
+    TASK: Extract ALL structured data from this document.
     
-    RETURN ONLY a JSON array of objects representing the rows. 
-    Use the table headers as keys.
-    If multiple tables exist, combine them into a single continuous array if they share structure, or return all rows.
+    STRATEGY:
+    1. If you see a VERTICAL FORM (Label on left, Value on right, like "UTR Number: 123"), convert it into a 2-column row: ["UTR Number", "123"].
+    2. If you see a HORIZONTAL TABLE (Grid with headers), extract it as objects.
+    3. Return a unified JSON array of arrays or objects.
     
-    CRITICAL: NO CONVERSATIONAL TEXT. NO MARKDOWN. ONLY RAW JSON.`;
+    RETURN ONLY a JSON array. 
+    Example for vertical data: [["Label1", "Value1"], ["Label2", "Value2"]]
+    Example for horizontal data: [{"Column1": "Val1", "Column2": "Val2"}]
+    
+    CRITICAL: Capture every single field. NO CONVERSATIONAL TEXT. ONLY RAW JSON.`;
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-pro",
