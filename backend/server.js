@@ -619,82 +619,115 @@ app.post('/api/tools/repair', upload.single('file'), async (req, res) => {
   }
 });
 
-// ─── PDF TOOL: A.I. Editor ──────────────────────────────
+// ─── PDF TOOL: A.I. Smart Redraft (High Fidelity) ───────
 app.post('/api/tools/edit', upload.single('file'), async (req, res) => {
   try {
     const { instructions } = req.body;
     if (!req.file || !instructions) return res.status(400).json({ error: 'Missing file or instructions.' });
 
-    const pdfData = {
-      inlineData: {
-        data: fs.readFileSync(req.file.path).toString('base64'),
-        mimeType: 'application/pdf',
-      },
-    };
-
-    const prompt = `You are a PDF Content Editor. 
-    TASK: ${instructions}
+    const inputData = getMultimodalData(req.file.path);
+    const prompt = `Act as a Professional Document Editor. 
+    TASK: Apply these edits: "${instructions}" to the provided document.
     
-    Analyze the document and provide the FULL TEXT of the page, but with the requested changes applied perfectly. 
-    Maintain the structure exactly.`;
+    CRITICAL: You must reconstruct the document's structure. 
+    Identify its headers, paragraphs, and tables.
+    Apply the edits while keeping the original formatting hierarchy.
+    
+    RETURN ONLY a JSON array of blocks:
+    [
+      { "type": "h1", "content": "Title" },
+      { "type": "paragraph", "content": "..." },
+      { "type": "table", "content": [["Row1Col1", "Row1Col2"], ["Row2Col1", "Row2Col2"]] }
+    ]
+    
+    NO CONVERSATIONAL TEXT. NO MARKDOWN. ONLY RAW JSON.`;
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-pro",
-      contents: [{ role: 'user', parts: [{ text: prompt }, pdfData] }]
+      contents: [{ role: 'user', parts: [{ text: prompt }, inputData] }]
     });
-    const editedText = response.text;
+
+    const blocks = extractCleanJson(response.text);
 
     const pdfDoc = await PDFDocument.create();
-    const { width, height } = { width: 600, height: 800 };
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     
-    let page = pdfDoc.addPage([width, height]);
+    let page = pdfDoc.addPage([600, 842]);
+    const { width, height } = page.getSize();
     let y = height - 50;
-
-    // --- Header ---
-    page.drawRectangle({ x: 0, y: height - 60, width, height: 60, color: rgb(0.04, 0.04, 0.04) });
-    page.drawText('NexGen A.I. SMART REDRAFT', { x: 50, y: height - 35, size: 14, font: fontBold, color: rgb(1, 1, 1) });
-    page.drawText(`Redrafted on: ${new Date().toLocaleDateString()}`, { x: width - 200, y: height - 35, size: 8, font, color: rgb(0.8, 0.8, 0.8) });
-
-    // --- Page Border ---
-    page.drawRectangle({ x: 20, y: 20, width: width - 40, height: height - 80, borderColor: rgb(0.9, 0.9, 0.9), borderWidth: 1 });
-
-    y -= 40; // Move below header
-
-    // --- Content with Line Wrapping ---
-    const lines = editedText.split('\n');
     const margin = 50;
-    const maxWidth = width - (margin * 2);
+    const availableWidth = width - (margin * 2);
 
-    for (const line of lines) {
-      if (y < 80) { // New page if near bottom
-        page = pdfDoc.addPage([width, height]);
-        page.drawRectangle({ x: 20, y: 20, width: width - 40, height: height - 40, borderColor: rgb(0.9, 0.9, 0.9), borderWidth: 1 });
+    // --- Header Branding ---
+    page.drawRectangle({ x: 0, y: height - 40, width, height: 40, color: rgb(0.05, 0.05, 0.05) });
+    page.drawText('NexGen A.I. SMART REDRAFT', { x: 50, y: height - 25, size: 10, font: fontBold, color: rgb(1, 1, 1) });
+
+    for (const block of blocks) {
+      if (y < 80) {
+        page = pdfDoc.addPage([600, 842]);
         y = height - 50;
       }
 
-      // Simple word wrap
-      const words = line.split(' ');
-      let currentLine = '';
+      const rawContent = typeof block.content === 'string' 
+        ? block.content.replace(/\*\*\*/g, '').replace(/\*\*/g, '') 
+        : block.content;
       
-      for (const word of words) {
-        const testLine = currentLine + (currentLine ? ' ' : '') + word;
-        const textWidth = font.widthOfTextAtSize(testLine, 9);
+      const content = sanitizeForPdf(rawContent).replace(/\n/g, ' ').replace(/\r/g, ' ');
+
+      if (block.type === 'h1' || block.type === 'h2') {
+        const size = block.type === 'h1' ? 16 : 12;
+        page.drawText(String(content), { x: margin, y: y - size, size, font: fontBold, color: rgb(0.1, 0.1, 0.1) });
+        y -= (size + 20);
+      } 
+      else if (block.type === 'table') {
+        const rows = Array.isArray(block.content) ? block.content : [];
+        if (rows.length === 0) continue;
         
-        if (textWidth > maxWidth) {
-          page.drawText(currentLine, { x: margin, y, size: 9, font, color: rgb(0.1, 0.1, 0.1) });
-          y -= 14;
-          currentLine = word;
-          if (y < 80) break; // Simplified page break check
-        } else {
-          currentLine = testLine;
+        const colCount = rows[0].length;
+        const colWidth = availableWidth / Math.max(colCount, 1);
+        const rowHeight = 20;
+
+        for (const [rowIndex, row] of rows.entries()) {
+          if (y < 60) { page = pdfDoc.addPage([600, 842]); y = height - 50; }
+          
+          let x = margin;
+          for (const cell of row) {
+            const rawCell = String(cell || '').replace(/\*\*\*/g, '').replace(/\*\*/g, '');
+            const cellText = sanitizeForPdf(rawCell).substring(0, 45);
+            
+            page.drawRectangle({
+              x, y: y - rowHeight,
+              width: colWidth, height: rowHeight,
+              borderColor: rgb(0.8, 0.8, 0.8), borderWidth: 0.5
+            });
+
+            page.drawText(cellText, {
+              x: x + 5, y: y - (rowHeight / 1.5),
+              size: 7, font: rowIndex === 0 ? fontBold : font
+            });
+            x += colWidth;
+          }
+          y -= rowHeight;
         }
-      }
-      
-      if (currentLine) {
-        page.drawText(currentLine, { x: margin, y, size: 9, font, color: rgb(0.1, 0.1, 0.1) });
-        y -= 18; // Extra padding between paragraphs
+        y -= 15;
+      } 
+      else {
+        const words = String(content).split(' ');
+        let line = '';
+        for (const word of words) {
+          const testLine = line + (line ? ' ' : '') + word;
+          if (font.widthOfTextAtSize(testLine, 9) > availableWidth) {
+            page.drawText(line, { x: margin, y, size: 9, font });
+            y -= 13;
+            line = word;
+            if (y < 50) { page = pdfDoc.addPage([600, 842]); y = height - 50; }
+          } else {
+            line = testLine;
+          }
+        }
+        page.drawText(line, { x: margin, y, size: 9, font });
+        y -= 20;
       }
     }
 
@@ -705,6 +738,7 @@ app.post('/api/tools/edit', upload.single('file'), async (req, res) => {
     
     if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
   } catch (err) {
+    console.error('Smart Redraft Error:', err);
     res.status(500).json({ error: 'Editing failed', details: err.message });
   }
 });
