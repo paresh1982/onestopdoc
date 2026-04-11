@@ -298,13 +298,38 @@ app.post('/api/chat', upload.array('files', 10), async (req, res) => {
     const contents = [];
     for (const msg of dbMessages) {
       const parts = [{ text: msg.content }];
-      // If this is the current message, add the new file contexts
-      if (msg === dbMessages[dbMessages.length - 1]) {
-        fileContexts.forEach(ctx => {
-          if (ctx.text) parts.push({ text: ctx.text });
-          if (ctx.inlineData) parts.push({ inlineData: ctx.inlineData });
-        });
+      
+      // ─── Restore Attachments for Context ───
+      // If the message has attachments, reload them from disk to feed Gemini's memory
+      if (msg.attachments && msg.attachments !== '[]') {
+        try {
+          const fileNames = JSON.parse(msg.attachments);
+          // We need to find the actual filenames on disk from the 'documents' table
+          const docs = await new Promise((resolve) => {
+            db.all('SELECT filename, original_name FROM documents WHERE conversation_id = ? AND original_name IN (' + fileNames.map(() => '?').join(',') + ')', [convId, ...fileNames], (err, rows) => {
+              resolve(rows || []);
+            });
+          });
+
+          for (const doc of docs) {
+            const filePath = path.join(UPLOAD_DIR, doc.filename);
+            if (fs.existsSync(filePath)) {
+              const fileContext = await getFileContext({ 
+                path: filePath, 
+                mimetype: doc.filename.endsWith('.pdf') ? 'application/pdf' : (doc.filename.endsWith('.xlsx') ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'text/plain'), // simplification
+                originalname: doc.original_name
+              });
+              if (fileContext) {
+                if (fileContext.text) parts.push({ text: fileContext.text });
+                if (fileContext.inlineData) parts.push({ inlineData: fileContext.inlineData });
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Failed to restore attachment context:", e);
+        }
       }
+      
       contents.push({ role: msg.role, parts });
     }
 
