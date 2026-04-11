@@ -659,13 +659,20 @@ app.post('/api/tools/edit', upload.single('file'), async (req, res) => {
     const margin = 50;
     const availableWidth = width - (margin * 2);
 
-    // --- Header Branding ---
-    page.drawRectangle({ x: 0, y: height - 40, width, height: 40, color: rgb(0.05, 0.05, 0.05) });
-    page.drawText('NexGen A.I. SMART REDRAFT', { x: 50, y: height - 25, size: 10, font: fontBold, color: rgb(1, 1, 1) });
+    // ─── Premium Header ───
+    page.drawRectangle({ x: 0, y: height - 42, width, height: 42, color: rgb(0.1, 0.1, 0.1) });
+    page.drawText('NexGen A.I. SMART REDRAFT', { x: 50, y: height - 26, size: 11, font: fontBold, color: rgb(1, 1, 1) });
+    page.drawText(`Edited: ${new Date().toLocaleDateString()}`, { x: width - 150, y: height - 26, size: 8, font, color: rgb(0.7, 0.7, 0.7) });
+
+    // ─── Subtle Page Border ───
+    page.drawRectangle({ x: 20, y: 20, width: width - 40, height: height - 80, borderColor: rgb(0.9, 0.9, 0.9), borderWidth: 0.5 });
+
+    y -= 40;
 
     for (const block of blocks) {
       if (y < 80) {
         page = pdfDoc.addPage([600, 842]);
+        page.drawRectangle({ x: 20, y: 20, width: width - 40, height: height - 40, borderColor: rgb(0.9, 0.9, 0.9), borderWidth: 0.5 });
         y = height - 50;
       }
 
@@ -676,9 +683,10 @@ app.post('/api/tools/edit', upload.single('file'), async (req, res) => {
       const content = sanitizeForPdf(rawContent).replace(/\n/g, ' ').replace(/\r/g, ' ');
 
       if (block.type === 'h1' || block.type === 'h2') {
-        const size = block.type === 'h1' ? 16 : 12;
-        page.drawText(String(content), { x: margin, y: y - size, size, font: fontBold, color: rgb(0.1, 0.1, 0.1) });
-        y -= (size + 20);
+        const size = block.type === 'h1' ? 16 : 13;
+        const color = block.type === 'h1' ? rgb(0.05, 0.2, 0.5) : rgb(0.1, 0.1, 0.1);
+        page.drawText(String(content), { x: margin, y: y - size, size, font: fontBold, color });
+        y -= (size + 15);
       } 
       else if (block.type === 'table') {
         const rows = Array.isArray(block.content) ? block.content : [];
@@ -686,12 +694,21 @@ app.post('/api/tools/edit', upload.single('file'), async (req, res) => {
         
         const colCount = rows[0].length;
         const colWidth = availableWidth / Math.max(colCount, 1);
-        const rowHeight = 20;
+        const rowHeight = 22;
 
         for (const [rowIndex, row] of rows.entries()) {
-          if (y < 60) { page = pdfDoc.addPage([600, 842]); y = height - 50; }
+          if (y < 60) { 
+            page = pdfDoc.addPage([600, 842]); 
+            page.drawRectangle({ x: 20, y: 20, width: width - 40, height: height - 40, borderColor: rgb(0.9, 0.9, 0.9), borderWidth: 0.5 });
+            y = height - 50; 
+          }
           
           let x = margin;
+          // Draw header background tint
+          if (rowIndex === 0) {
+            page.drawRectangle({ x, y: y - rowHeight, width: availableWidth, height: rowHeight, color: rgb(0.96, 0.97, 1.0) });
+          }
+
           for (const cell of row) {
             const rawCell = String(cell || '').replace(/\*\*\*/g, '').replace(/\*\*/g, '');
             const cellText = sanitizeForPdf(rawCell).substring(0, 45);
@@ -699,12 +716,13 @@ app.post('/api/tools/edit', upload.single('file'), async (req, res) => {
             page.drawRectangle({
               x, y: y - rowHeight,
               width: colWidth, height: rowHeight,
-              borderColor: rgb(0.8, 0.8, 0.8), borderWidth: 0.5
+              borderColor: rgb(0.85, 0.85, 0.85), borderWidth: 0.5
             });
 
             page.drawText(cellText, {
-              x: x + 5, y: y - (rowHeight / 1.5),
-              size: 7, font: rowIndex === 0 ? fontBold : font
+              x: x + 6, y: y - (rowHeight / 1.5),
+              size: 7.5, font: rowIndex === 0 ? fontBold : font,
+              color: rowIndex === 0 ? rgb(0.05, 0.2, 0.4) : rgb(0.2, 0.2, 0.2)
             });
             x += colWidth;
           }
@@ -717,17 +735,21 @@ app.post('/api/tools/edit', upload.single('file'), async (req, res) => {
         let line = '';
         for (const word of words) {
           const testLine = line + (line ? ' ' : '') + word;
-          if (font.widthOfTextAtSize(testLine, 9) > availableWidth) {
-            page.drawText(line, { x: margin, y, size: 9, font });
-            y -= 13;
+          if (font.widthOfTextAtSize(testLine, 9.5) > availableWidth) {
+            page.drawText(line, { x: margin, y, size: 9.5, font, color: rgb(0.25, 0.25, 0.25) });
+            y -= 13.5;
             line = word;
-            if (y < 50) { page = pdfDoc.addPage([600, 842]); y = height - 50; }
+            if (y < 50) { 
+              page = pdfDoc.addPage([600, 842]); 
+              page.drawRectangle({ x: 20, y: 20, width: width - 40, height: height - 40, borderColor: rgb(0.9, 0.9, 0.9), borderWidth: 0.5 });
+              y = height - 50; 
+            }
           } else {
             line = testLine;
           }
         }
-        page.drawText(line, { x: margin, y, size: 9, font });
-        y -= 20;
+        page.drawText(line, { x: margin, y, size: 9.5, font, color: rgb(0.25, 0.25, 0.25) });
+        y -= 18;
       }
     }
 
