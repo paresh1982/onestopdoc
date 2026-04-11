@@ -1058,7 +1058,8 @@ app.post('/api/tools/word-to-pdf', upload.single('file'), async (req, res) => {
         ? block.content.replace(/\*\*\*/g, '').replace(/\*\*/g, '') 
         : block.content;
       
-      const content = sanitizeForPdf(rawContent);
+      // CRITICAL: Remove all newlines. pdf-lib drawText crashes on \n (0x000a)
+      const content = sanitizeForPdf(rawContent).replace(/\n/g, ' ').replace(/\r/g, ' ');
 
       if (block.type === 'h1' || block.type === 'h2') {
         const size = block.type === 'h1' ? 18 : 14;
