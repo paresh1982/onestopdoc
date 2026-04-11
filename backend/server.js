@@ -185,23 +185,36 @@ async function getFileContext(file) {
 }
 
 async function callGemini(contents, maxRetries = 3) {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+  const models = [
+    'gemini-2.5-pro',
+    'gemini-3.0-flash',
+    'gemini-2.5-flash'
+  ];
+
+  for (let attempt = 0; attempt < models.length; attempt++) {
+    const modelName = models[attempt];
     try {
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-pro',
+        model: modelName,
         contents,
         config: {
           systemInstruction: SYSTEM_PROMPT,
           tools: [{ codeExecution: {} }],
         }
       });
+      console.log(`✅ Success via ${modelName} (Attempt ${attempt + 1})`);
       return response.text;
     } catch (err) {
-      if (err?.status === 429 && attempt < maxRetries) {
-        const cooldown = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
-        console.log(`⏱ Rate limited. Retry ${attempt}/${maxRetries} in ${Math.round(cooldown)}ms`);
+      const status = err?.status || err?.code;
+      const isRecoverable = status === 429 || status === 503 || status === 500;
+      
+      if (isRecoverable && attempt < models.length - 1) {
+        const cooldown = 500 + Math.random() * 500;
+        console.warn(`⚠️ ${modelName} failed (${status}). Failing over to ${models[attempt + 1]} in ${Math.round(cooldown)}ms...`);
         await new Promise((r) => setTimeout(r, cooldown));
+        continue;
       } else {
+        console.error(`❌ All models failed or unrecoverable error:`, err.message);
         throw err;
       }
     }
