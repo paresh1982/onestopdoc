@@ -483,90 +483,107 @@ app.post('/api/tools/compress', upload.single('file'), async (req, res) => {
   }
 });
 
-// ─── CONVERSION: PDF to Excel ────────────────────────────
-app.post('/api/tools/pdf-to-excel', upload.single('file'), async (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ error: 'Please upload a PDF.' });
+// ─── TOOL HELPER: Multimodal Data ────────────────────
+const getMultimodalData = (filePath) => {
+  const fileBuffer = fs.readFileSync(filePath);
+  const ext = path.extname(filePath).toLowerCase();
+  let mimeType = 'application/pdf';
+  if (ext === '.png') mimeType = 'image/png';
+  if (ext === '.jpg' || ext === '.jpeg') mimeType = 'image/jpeg';
+  
+  return {
+    inlineData: {
+      data: fileBuffer.toString('base64'),
+      mimeType,
+    },
+  };
+};
 
-    const pdfData = {
-      inlineData: {
-        data: fs.readFileSync(req.file.path).toString('base64'),
-        mimeType: 'application/pdf',
-      },
-    };
-
-    const prompt = "Extract all tabular data from this PDF as a JSON array of objects. Be precise.";
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-pro",
-      contents: [{ role: 'user', parts: [{ text: prompt }, pdfData] }]
-    });
-    const text = response.text;
-    const jsonStr = text.match(/```json\n([\s\S]*?)\n```/)?.[1] || text;
-    const data = JSON.parse(jsonStr);
-
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('OneStopDoc_Export');
-    
-    if (data.length > 0) {
-      const headers = Object.keys(data[0]);
-      worksheet.addRow(headers);
-      data.forEach(row => worksheet.addRow(headers.map(h => row[h])));
-    }
-
-    const buffer = await workbook.xlsx.writeBuffer();
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename=OneStopDoc_Converted.xlsx');
-    res.send(buffer);
-    fs.unlinkSync(req.file.path);
-  } catch (err) {
-    res.status(500).json({ error: 'PDF to Excel conversion failed', details: err.message });
-  }
-});
-
-// ─── CONVERSION: PDF to Word ─────────────────────────────
+// ─── PDF TOOL: PDF to Word (High Fidelity) ───────────────
 app.post('/api/tools/pdf-to-word', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Please upload a PDF.' });
+    
+    const inputData = getMultimodalData(req.file.path);
+    const prompt = `Act as a High-Fidelity Document Architect. 
+    Analyze this document and extract its EXACT structure.
+    
+    1. Identify headers (H1 for main titles, H2 for section headers).
+    2. Identify regular paragraphs.
+    3. Identify ALL tables and extract them as 2D arrays (rows of columns).
+    4. Group content in the exact order it appears.
+    
+    RETURN ONLY a JSON array of blocks:
+    [
+      { "type": "h1", "content": "Title text" },
+      { "type": "paragraph", "content": "Paragraph text..." },
+      { "type": "table", "content": [["Cell 1", "Cell 2"], ["Cell 3", "Cell 4"]] },
+      { "type": "h2", "content": "Subtitle" }
+    ]
+    
+    CRITICAL: NO CONVERSATIONAL TEXT. NO MARKDOWN. ONLY RAW JSON.`;
 
-    const pdfData = {
-      inlineData: {
-        data: fs.readFileSync(req.file.path).toString('base64'),
-        mimeType: 'application/pdf',
-      },
-    };
-
-    const prompt = "Extract the main text content of this PDF. Maintain the general hierarchy and headings.";
     const response = await ai.models.generateContent({
       model: "gemini-2.5-pro",
-      contents: [{ role: 'user', parts: [{ text: prompt }, pdfData] }]
+      contents: [{ role: 'user', parts: [{ text: prompt }, inputData] }]
     });
-    const content = response.text;
+
+    const blocks = extractCleanJson(response.text);
 
     const doc = new Document({
       sections: [{
         properties: {},
-        children: [
-          new Paragraph({
-            text: "OneStopDoc Intelligence Report",
-            heading: HeadingLevel.HEADING_1,
-          }),
-          ...content.split('\n').filter(l => l.trim() !== '').map(line => 
-            new Paragraph({
-              children: [new TextRun(line.replace(/[#*]/g, ''))],
-              spacing: { after: 200 },
-            })
-          ),
-        ],
+        children: blocks.map(block => {
+          if (block.type === 'h1') {
+            return new Paragraph({
+              text: String(block.content),
+              heading: HeadingLevel.HEADING_1,
+              spacing: { before: 400, after: 200 }
+            });
+          }
+          if (block.type === 'h2') {
+            return new Paragraph({
+              text: String(block.content),
+              heading: HeadingLevel.HEADING_2,
+              spacing: { before: 300, after: 150 }
+            });
+          }
+          if (block.type === 'table') {
+            const rows = Array.isArray(block.content) ? block.content : [];
+            return new Table({
+              width: { size: 100, type: WidthType.PERCENTAGE },
+              rows: rows.map(row => new TableRow({
+                children: (Array.isArray(row) ? row : Object.values(row)).map(cell => new TableCell({
+                  children: [new Paragraph({ text: String(cell || ''), spacing: { before: 80, after: 80 } })],
+                  verticalAlign: VerticalAlign.CENTER,
+                }))
+              }))
+            });
+          }
+          // Default: Paragraph
+          return new Paragraph({
+            children: [new TextRun({ text: String(block.content || ""), size: 22 })],
+            spacing: { after: 200 }
+          });
+        }).flat()
       }],
+      styles: {
+        default: {
+          heading1: { run: { size: 36, bold: true, color: "111827", font: "Helvetica" } },
+          heading2: { run: { size: 28, bold: true, color: "374151", font: "Helvetica" } },
+        }
+      }
     });
 
     const buffer = await Packer.toBuffer(doc);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-    res.setHeader('Content-Disposition', 'attachment; filename=OneStopDoc_Converted.docx');
+    res.setHeader('Content-Disposition', 'attachment; filename=NexGen_Structural_Export.docx');
     res.send(buffer);
-    fs.unlinkSync(req.file.path);
+    
+    if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
   } catch (err) {
-    res.status(500).json({ error: 'PDF to Word conversion failed', details: err.message });
+    console.error('PDF-to-Word Error:', err);
+    res.status(500).json({ error: 'Word conversion failed', details: err.message });
   }
 });
 
@@ -838,88 +855,47 @@ const getDeepCellValue = (cell) => {
   return String(cell.value);
 };
 
-// ─── PDF TOOL: PDF to Word (Supports Images) ─────────────
-app.post('/api/tools/pdf-to-word', upload.single('file'), async (req, res) => {
-  try {
-    const inputData = getMultimodalData(req.file.path);
-    const prompt = `Act as an expert document formatter. Extract ALL content from this ${inputData.inlineData.mimeType.startsWith('image') ? 'image' : 'document'}.
-    Group text into: "h1" (Main Titles), "h2" (Section Headers), "paragraph" (Normal text), or "table" (Grid data).
-    For tables, provide a 2D array of strings. 
-    FORMAT: JSON array of { "type": "h1"|"h2"|"paragraph"|"table", "content": "..." | [[row1], [row2]] }.
-    CRITICAL: ONLY provide the raw JSON. No markdown, no pipes, no dashes, no conversational text.`;
-
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-pro",
-      contents: [{ role: 'user', parts: [{ text: prompt }, inputData] }]
-    });
-
-    const blocks = extractCleanJson(response.text);
-
-    const doc = new Document({
-      sections: [{
-        children: blocks.map(block => {
-          if (block.type === 'h1') return new Paragraph({ text: String(block.content), heading: HeadingLevel.HEADING_1, spacing: { before: 400, after: 200 } });
-          if (block.type === 'h2') return new Paragraph({ text: String(block.content), heading: HeadingLevel.HEADING_2, spacing: { before: 300, after: 150 } });
-          if (block.type === 'table') {
-            const grid = Array.isArray(block.content) ? block.content : [];
-            return new Table({
-              width: { size: 100, type: WidthType.PERCENTAGE },
-              rows: grid.map(row => new TableRow({
-                children: (Array.isArray(row) ? row : Object.values(row)).map(val => new TableCell({
-                  children: [new Paragraph({ text: String(val || ''), spacing: { before: 100, after: 100 } })]
-                }))
-              }))
-            });
-          }
-          return new Paragraph({ children: [new TextRun({ text: String(block.content || ""), size: 22 })], spacing: { after: 200 } });
-        }).flat()
-      }],
-      styles: { default: { heading1: { run: { size: 32, bold: true, color: "2563EB" } }, heading2: { run: { size: 26, bold: true, color: "1E40AF" } } } }
-    });
-
-    const buffer = await Packer.toBuffer(doc);
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-    res.setHeader('Content-Disposition', 'attachment; filename=OneStopDoc_Rich_Export.docx');
-    res.send(buffer);
-    fs.unlinkSync(req.file.path);
-  } catch (err) {
-    res.status(500).json({ error: 'Word conversion failed', details: err.message });
-  }
-});
-
-// ─── PDF TOOL: PDF to Excel (Supports Images) ────────────
+// ─── PDF TOOL: PDF to Excel (High Fidelity) ────────────
 app.post('/api/tools/pdf-to-excel', upload.single('file'), async (req, res) => {
   try {
+    if (!req.file) return res.status(400).json({ error: 'Please upload a PDF or Image.' });
     const inputData = getMultimodalData(req.file.path);
-    const prompt = `Act as a visual mirror engine. Extract all tabular data exactly as it appears.
-    IF it is a vertical form (Labels on left), return a 2nd-column mapping for values. 
-    Result must be an array of arrays: [["Label1", "Value1"], ["Label2", "Value2"]].
-    IF it is a standard horizontal table, return a JSON array of objects.
-    CRITICAL: ONLY provide the raw JSON. No markdown markers.`;
+    const prompt = `Act as a Visual Data Architect. Extract ALL tabular data exactly as it appears.
+    Maintain the original column order.
+    
+    RETURN ONLY a JSON array of objects representing the rows. 
+    Use the table headers as keys.
+    If multiple tables exist, combine them into a single continuous array if they share structure, or return all rows.
+    
+    CRITICAL: NO CONVERSATIONAL TEXT. NO MARKDOWN. ONLY RAW JSON.`;
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-pro",
       contents: [{ role: 'user', parts: [{ text: prompt }, inputData] }]
     });
 
-    const rows = extractCleanJson(response.text);
+    const data = extractCleanJson(response.text);
     const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet('Extraction');
+    const worksheet = workbook.addWorksheet('NexGen_Structural_Export');
     
-    rows.forEach(row => {
-      const dataRow = Array.isArray(row) ? row : Object.entries(row).flat();
-      sheet.addRow(dataRow);
-    });
-
-    // Auto-fit & Pro Style
-    sheet.columns.forEach(column => { column.width = 30; });
+    if (data.length > 0) {
+      const headers = Object.keys(data[0]);
+      worksheet.addRow(headers);
+      data.forEach(row => worksheet.addRow(headers.map(h => row[h])));
+      
+      // Style headers
+      worksheet.getRow(1).font = { bold: true };
+      worksheet.columns.forEach(column => { column.width = 25; });
+    }
 
     const buffer = await workbook.xlsx.writeBuffer();
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename=OneStopDoc_Grid_Data.xlsx');
+    res.setHeader('Content-Disposition', 'attachment; filename=NexGen_Grid_Export.xlsx');
     res.send(buffer);
-    fs.unlinkSync(req.file.path);
+    
+    if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
   } catch (err) {
+    console.error('PDF-to-Excel Error:', err);
     res.status(500).json({ error: 'Excel conversion failed', details: err.message });
   }
 });
