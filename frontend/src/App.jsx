@@ -345,6 +345,7 @@ function renderContent(text) {
 // ─── Dynamic Table (renders ANY JSON array) ──────────────
 function DynamicTable({ data, raw }) {
   const [copied, setCopied] = useState(false);
+  const activeConvId = ''; // Assuming context provides this or it's global
   if (!data || data.length === 0) return null;
 
   const headers = Object.keys(data[0]);
@@ -440,7 +441,7 @@ function ChatMessage({ msg }) {
       }`}>
         {isUser ? <User size={16} /> : <Bot size={16} />}
       </div>
-      <div className={`max-w-[85%] md:max-w-[75%] ${isUser ? 'items-end' : 'items-start'}`}>
+      <div className={`w-full ${isUser ? 'items-end' : 'items-start'}`}>
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-2">
             {attachments.map((name, i) => (
