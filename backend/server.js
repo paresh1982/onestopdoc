@@ -594,43 +594,6 @@ app.post('/api/tools/pdf-to-word', upload.single('file'), async (req, res) => {
   }
 });
 
-// ─── CONVERSION: Excel to PDF ────────────────────────────
-app.post('/api/tools/excel-to-pdf', upload.single('file'), async (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ error: 'Please upload an Excel file.' });
-
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.readFile(req.file.path);
-    const worksheet = workbook.worksheets[0];
-    
-    const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage([600, 800]);
-    const { width, height } = page.getSize();
-    
-    let y = height - 50;
-    page.drawText('Excel to PDF Conversion', { x: 50, y, size: 18, color: { type: 'RGB', red: 0, green: 0, blue: 0 } });
-    y -= 40;
-
-    worksheet.eachRow((row, rowNumber) => {
-      if (y < 50) return; // Simple page limit for now
-      let x = 50;
-      row.eachCell((cell) => {
-        page.drawText(String(cell.value || ''), { x, y, size: 8 });
-        x += 100;
-      });
-      y -= 15;
-    });
-
-    const pdfBytes = await pdfDoc.save();
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'attachment; filename=OneStopDoc_Excel_to_PDF.pdf');
-    res.send(Buffer.from(pdfBytes));
-    fs.unlinkSync(req.file.path);
-  } catch (err) {
-    res.status(500).json({ error: 'Excel to PDF conversion failed', details: err.message });
-  }
-});
-
 // ─── PDF TOOL: Repair ───────────────────────────────────
 app.post('/api/tools/repair', upload.single('file'), async (req, res) => {
   try {
@@ -928,10 +891,12 @@ app.post('/api/tools/pdf-to-excel', upload.single('file'), async (req, res) => {
   }
 });
 
-// ─── PDF TOOL: Excel to PDF ──────────────────────────────
+// ─── PDF TOOL: Excel to PDF (High Fidelity Mirror) ───────
 app.post('/api/tools/excel-to-pdf', upload.single('file'), async (req, res) => {
   try {
     const { sheets } = req.body; 
+    if (!req.file) return res.status(400).json({ error: 'Please upload an Excel file.' });
+
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.readFile(req.file.path);
     
@@ -941,34 +906,68 @@ app.post('/api/tools/excel-to-pdf', upload.single('file'), async (req, res) => {
     const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     
     for (const worksheet of workbook.worksheets) {
+      // Filter by user sheets if provided
       if (targetNames.length > 0 && !targetNames.includes(worksheet.name.trim().toLowerCase())) continue;
 
+      // Landscape A3/A4 hybrid for wide data
       const page = pdfDoc.addPage([1190, 842]); 
-      let y = 800;
-      page.drawText(`WORKBOOK: ${worksheet.name.toUpperCase()}`, { x: 50, y: 815, size: 14, font: fontBold, color: rgb(0.14, 0.38, 0.92) });
+      const { width, height } = page.getSize();
+      let y = height - 60;
+      
+      // Header Branding
+      page.drawRectangle({ x: 0, y: height - 40, width, height: 40, color: rgb(0.05, 0.05, 0.05) });
+      page.drawText(`SHEET: ${worksheet.name.toUpperCase()}`, { x: 50, y: height - 25, size: 12, font: fontBold, color: rgb(1, 1, 1) });
+
+      // Table Settings
+      const margin = 40;
+      const colWidth = (width - (margin * 2)) / Math.max(worksheet.actualColumnCount, 5);
+      const rowHeight = 20;
+
+      // Draw Grid Header Background
+      page.drawRectangle({ x: margin, y: y - rowHeight, width: width - (margin * 2), height: rowHeight, color: rgb(0.95, 0.95, 0.95) });
 
       worksheet.eachRow({ includeEmpty: true }, (row, rowNumber) => {
-        if (y < 40) return;
-        let x = 50;
-        row.eachCell({ includeEmpty: true }, (cell) => {
+        if (y < 60) return; // Simple page limit
+
+        let x = margin;
+        row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
           const val = getDeepCellValue(cell);
-          const drawVal = val.length > 60 ? val.substring(0, 57) + '...' : val;
+          const drawVal = String(val).substring(0, 40); // Simple truncation for alignment
+
+          // Draw Cell Border
+          page.drawRectangle({
+            x, y: y - rowHeight,
+            width: colWidth, height: rowHeight,
+            borderColor: rgb(0.8, 0.8, 0.8),
+            borderWidth: 0.5
+          });
+
+          // Draw Text
           try {
-            page.drawText(drawVal, { x, y, size: 8, font });
+            page.drawText(drawVal, {
+              x: x + 5,
+              y: y - (rowHeight / 1.5),
+              size: 8,
+              font: rowNumber === 1 ? fontBold : font,
+              color: rgb(0.1, 0.1, 0.1)
+            });
           } catch(e) {}
-          x += 110; 
+          
+          x += colWidth;
         });
-        y -= 20;
+        y -= rowHeight;
       });
     }
 
     const pdfBytes = await pdfDoc.save();
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'attachment; filename=OneStopDoc_Pro_Mirror.pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename=NexGen_Excel_Mirror.pdf');
     res.send(Buffer.from(pdfBytes));
-    fs.unlinkSync(req.file.path);
+    
+    if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
   } catch (err) {
-    res.status(500).json({ error: 'PDF conversion failed', details: err.message });
+    console.error('Excel-to-PDF Error:', err);
+    res.status(500).json({ error: 'Excel to PDF conversion failed', details: err.message });
   }
 });
 
