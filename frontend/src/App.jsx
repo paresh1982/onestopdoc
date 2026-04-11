@@ -324,9 +324,11 @@ function renderContent(text) {
     }
 
     // Regular text — simple markdown
+    const cleanPart = part.replace(/\*\*\*/g, '').replace(/\*\*/g, '');
+    
     return (
       <div key={i} className={`prose prose-sm max-w-none ${document.documentElement.classList.contains('dark') ? 'prose-invert' : ''}`}>
-        {part.split('\n').map((line, j) => {
+        {cleanPart.split('\n').map((line, j) => {
           if (line.startsWith('### ')) return <h3 key={j} className="text-base font-bold text-foreground mt-4 mb-1">{line.replace('### ', '')}</h3>;
           if (line.startsWith('## ')) return <h2 key={j} className="text-lg font-bold text-foreground mt-4 mb-1">{line.replace('## ', '')}</h2>;
           if (line.startsWith('# ')) return <h1 key={j} className="text-xl font-bold text-foreground mt-4 mb-2">{line.replace('# ', '')}</h1>;
