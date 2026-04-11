@@ -990,6 +990,17 @@ app.post('/api/tools/excel-to-pdf', upload.single('file'), async (req, res) => {
   }
 });
 
+// ─── TOOL HELPER: PDF Safe Text ──────────────────────
+const sanitizeForPdf = (text) => {
+  if (!text) return '';
+  return String(text)
+    .replace(/[\u2011\u2012\u2013\u2014\u2015]/g, '-') // Hyphens/Dashes
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")       // Single quotes
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"')       // Double quotes
+    .replace(/[\u2022\u2023\u2043\u204C\u204D]/g, '*') // Bullets
+    .replace(/[^\x00-\x7F]/g, '');                     // Remove anything else non-ASCII for safety
+};
+
 // ─── PDF TOOL: Word to PDF (High Fidelity Mirror) ───────
 app.post('/api/tools/word-to-pdf', upload.single('file'), async (req, res) => {
   try {
@@ -1043,9 +1054,11 @@ app.post('/api/tools/word-to-pdf', upload.single('file'), async (req, res) => {
         y = height - 50;
       }
 
-      const content = typeof block.content === 'string' 
+      const rawContent = typeof block.content === 'string' 
         ? block.content.replace(/\*\*\*/g, '').replace(/\*\*/g, '') 
         : block.content;
+      
+      const content = sanitizeForPdf(rawContent);
 
       if (block.type === 'h1' || block.type === 'h2') {
         const size = block.type === 'h1' ? 18 : 14;
@@ -1053,7 +1066,7 @@ app.post('/api/tools/word-to-pdf', upload.single('file'), async (req, res) => {
         y -= (size + 20);
       } 
       else if (block.type === 'table') {
-        const rows = Array.isArray(content) ? content : [];
+        const rows = Array.isArray(content) ? content : (Array.isArray(block.content) ? block.content : []);
         if (rows.length === 0) continue;
         
         const colCount = rows[0].length;
@@ -1065,7 +1078,8 @@ app.post('/api/tools/word-to-pdf', upload.single('file'), async (req, res) => {
           
           let x = margin;
           for (const cell of row) {
-            const cellText = String(cell || '').replace(/\*\*\*/g, '').replace(/\*\*/g, '').substring(0, 40);
+            const rawCell = String(cell || '').replace(/\*\*\*/g, '').replace(/\*\*/g, '');
+            const cellText = sanitizeForPdf(rawCell).substring(0, 40);
             
             // Draw Cell
             page.drawRectangle({
