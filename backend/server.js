@@ -655,25 +655,14 @@ app.post('/api/tools/edit', upload.single('file'), async (req, res) => {
     
     let page = pdfDoc.addPage([600, 842]);
     const { width, height } = page.getSize();
-    let y = height - 50;
+    let y = height - 40;
     const margin = 50;
     const availableWidth = width - (margin * 2);
 
-    // ─── Premium Header ───
-    page.drawRectangle({ x: 0, y: height - 42, width, height: 42, color: rgb(0.1, 0.1, 0.1) });
-    page.drawText('NexGen A.I. SMART REDRAFT', { x: 50, y: height - 26, size: 11, font: fontBold, color: rgb(1, 1, 1) });
-    page.drawText(`Edited: ${new Date().toLocaleDateString()}`, { x: width - 150, y: height - 26, size: 8, font, color: rgb(0.7, 0.7, 0.7) });
-
-    // ─── Subtle Page Border ───
-    page.drawRectangle({ x: 20, y: 20, width: width - 40, height: height - 80, borderColor: rgb(0.9, 0.9, 0.9), borderWidth: 0.5 });
-
-    y -= 40;
-
     for (const block of blocks) {
-      if (y < 80) {
+      if (y < 60) {
         page = pdfDoc.addPage([600, 842]);
-        page.drawRectangle({ x: 20, y: 20, width: width - 40, height: height - 40, borderColor: rgb(0.9, 0.9, 0.9), borderWidth: 0.5 });
-        y = height - 50;
+        y = height - 40;
       }
 
       const rawContent = typeof block.content === 'string' 
@@ -985,10 +974,7 @@ app.post('/api/tools/excel-to-pdf', upload.single('file'), async (req, res) => {
 
       const page = pdfDoc.addPage([1190, 842]); 
       const { width, height } = page.getSize();
-      let y = height - 60;
-      
-      page.drawRectangle({ x: 0, y: height - 40, width, height: 40, color: rgb(0.05, 0.05, 0.05) });
-      page.drawText(`SHEET: ${worksheet.name.toUpperCase()}`, { x: 50, y: height - 25, size: 12, font: fontBold, color: rgb(1, 1, 1) });
+      let y = height - 40; // Start higher since header is gone
 
       const margin = 40;
       const availableWidth = width - (margin * 2);
@@ -1100,25 +1086,14 @@ app.post('/api/tools/word-to-pdf', upload.single('file'), async (req, res) => {
     
     let page = pdfDoc.addPage([600, 842]);
     const { width, height } = page.getSize();
-    let y = height - 50;
+    let y = height - 40;
     const margin = 50;
     const availableWidth = width - (margin * 2);
 
-    // ─── Premium Header Branding ───
-    page.drawRectangle({ x: 0, y: height - 42, width, height: 42, color: rgb(0.1, 0.1, 0.1) });
-    page.drawText('NexGen A.I. DOCUMENT EXPORT', { x: 50, y: height - 26, size: 10, font: fontBold, color: rgb(1, 1, 1) });
-    page.drawText(`Converted: ${new Date().toLocaleDateString()}`, { x: width - 150, y: height - 26, size: 8, font, color: rgb(0.7, 0.7, 0.7) });
-
-    // ─── Subtle Page Border ───
-    page.drawRectangle({ x: 20, y: 20, width: width - 40, height: height - 80, borderColor: rgb(0.9, 0.9, 0.9), borderWidth: 0.5 });
-
-    y -= 40;
-
     for (const block of blocks) {
-      if (y < 80) {
+      if (y < 60) {
         page = pdfDoc.addPage([600, 842]);
-        page.drawRectangle({ x: 20, y: 20, width: width - 40, height: height - 40, borderColor: rgb(0.9, 0.9, 0.9), borderWidth: 0.5 });
-        y = height - 50;
+        y = height - 40;
       }
 
       const rawContent = typeof block.content === 'string' 
